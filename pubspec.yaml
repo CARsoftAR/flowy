@@ -1,0 +1,76 @@
+name: flowy
+description: "Flowy - Premium Music Streaming Experience"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ─── Audio Core ───────────────────────────────────────────────────
+  just_audio: 0.9.42
+  audio_service: 0.18.18
+  audio_session: 0.1.25
+
+  # ─── YouTube Data Extraction ──────────────────────────────────────
+  youtube_explode_dart: ^3.0.1
+
+  # ─── State Management ─────────────────────────────────────────────
+  flutter_bloc: ^8.1.6
+  bloc: ^8.1.4
+  equatable: ^2.0.5
+  provider: ^6.1.2
+
+  # ─── UI & Theming ─────────────────────────────────────────────────
+  dynamic_color: ^1.7.0
+  palette_generator: ^0.3.3+3
+  flutter_animate: ^4.5.0
+  shimmer: ^3.0.0
+  cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.1
+
+  # ─── Animations & Effects ─────────────────────────────────────────
+  glassmorphism: ^3.0.0
+  lottie: ^3.1.2
+  rive: ^0.13.17
+
+  # ─── Navigation ───────────────────────────────────────────────────
+  go_router: ^14.6.2
+
+  # ─── Utilities ────────────────────────────────────────────────────
+  rxdart: ^0.28.0
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+  dartz: ^0.10.1
+  get_it: ^8.0.2
+  injectable: ^2.5.0
+  shared_preferences: ^2.3.3
+  connectivity_plus: ^6.1.1
+  http: ^1.2.2
+  path_provider: ^2.1.4
+  permission_handler: ^11.3.1
+  uuid: ^4.5.1
+  intl: ^0.19.0
+  crypto: ^3.0.5
+  logger: ^2.5.0
+
+  # ─── Icons & Fonts ────────────────────────────────────────────────
+  cupertino_icons: ^1.0.8
+  flutter_svg: ^2.0.10+1
+  material_symbols_icons: ^4.2786.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.13
+  freezed: ^2.5.7
+  json_serializable: ^6.8.0
+  injectable_generator: ^2.7.0
+  mockito: ^5.4.4
+
+flutter:
+  uses-material-design: true
