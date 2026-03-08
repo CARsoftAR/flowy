@@ -91,9 +91,28 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
               actions: [
-                IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.notifications_outlined),
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      onPressed: () => _showNotifications(context, theme, scheme),
+                      icon: const Icon(Icons.notifications_outlined),
+                    ),
+                    Positioned(
+                      right: 12,
+                      top: 12,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: scheme.primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.black, width: 1.5),
+                        ),
+                      ),
+                    ).animate(onPlay: (c) => c.repeat(reverse: true))
+                        .scale(begin: const Offset(1, 1), end: const Offset(1.2, 1.2), duration: 2.seconds),
+                  ],
                 ),
                 const SizedBox(width: 8),
               ],
@@ -207,6 +226,138 @@ class _HomePageState extends State<HomePage> {
     if (hour < 12) return '¡Buenos días! ☀️';
     if (hour < 18) return '¡Buenas tardes! 🎵';
     return '¡Buenas noches! 🌙';
+  }
+
+  void _showNotifications(BuildContext context, ThemeData theme, ColorScheme scheme) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          decoration: BoxDecoration(
+            color: Color.lerp(scheme.surface, Colors.black, 0.8),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            border: Border.all(color: Colors.white10, width: 0.5),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    Text(
+                      'Notificaciones',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cerrar'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    _buildNotifItem(
+                      icon: Icons.auto_awesome_rounded,
+                      title: 'Tu Mix de Energía',
+                      desc: 'Hemos añadido 12 nuevas canciones que te encantarán basadas en Taylor Swift.',
+                      time: 'Ahora',
+                      color: Colors.amber,
+                    ),
+                    _buildNotifItem(
+                      icon: Icons.rocket_launch_rounded,
+                      title: 'Flowy Engine v2.0',
+                      desc: 'El nuevo motor de audio HD ya está activo para mejorar tu experiencia auditiva.',
+                      time: 'Hace 2 horas',
+                      color: scheme.primary,
+                    ),
+                    _buildNotifItem(
+                      icon: Icons.favorite_rounded,
+                      title: 'Fan de la Semana',
+                      desc: '¡Has escuchado más de 50 horas esta semana! Mira tus estadísticas.',
+                      time: 'Ayer',
+                      color: Colors.pinkAccent,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNotifItem({
+    required IconData icon,
+    required String title,
+    required String desc,
+    required String time,
+    required Color color,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  desc,
+                  style: const TextStyle(color: Colors.white54, fontSize: 14, height: 1.4),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  time,
+                  style: const TextStyle(color: Colors.white24, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
