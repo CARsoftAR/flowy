@@ -362,23 +362,39 @@ class _HomePageState extends State<HomePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
-                        ),
-                        const Spacer(),
-                        Text(
-                          time,
-                          style: TextStyle(color: color.withOpacity(0.7), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1),
-                        ),
-                      ],
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900, 
+                        fontSize: 17,
+                        letterSpacing: -0.2,
+                      ),
                     ),
                     const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        time,
+                        style: TextStyle(
+                          color: color, 
+                          fontSize: 9, 
+                          fontWeight: FontWeight.w900, 
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     Text(
                       desc,
-                      style: const TextStyle(color: Colors.white54, fontSize: 14, height: 1.5),
+                      style: const TextStyle(
+                        color: Colors.white54, 
+                        fontSize: 14, 
+                        height: 1.5,
+                      ),
                     ),
                   ],
                 ),
@@ -391,13 +407,33 @@ class _HomePageState extends State<HomePage> {
               child: Divider(color: Colors.white.withOpacity(0.05), height: 1),
             ),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: stats.map((s) => Column(
-                children: [
-                  Text(s.value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
-                  const SizedBox(height: 4),
-                  Text(s.label.toUpperCase(), style: const TextStyle(fontSize: 9, color: Colors.white38, letterSpacing: 1, fontWeight: FontWeight.w700)),
-                ],
+              children: stats.map((s) => Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      s.value, 
+                      style: const TextStyle(
+                        fontSize: 18, 
+                        fontWeight: FontWeight.w900, 
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      s.label.toUpperCase(), 
+                      style: const TextStyle(
+                        fontSize: 9, 
+                        color: Colors.white38, 
+                        letterSpacing: 1, 
+                        fontWeight: FontWeight.w700,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               )).toList(),
             ),
           ]
