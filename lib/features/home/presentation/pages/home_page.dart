@@ -229,23 +229,36 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showNotifications(BuildContext context, ThemeData theme, ColorScheme scheme) {
+    final library = context.read<LibraryProvider>();
+    final recentSongs = library.recentlyPlayed;
+    
+    // Determine a dynamic genre/tag from recent history
+    String recommendedGenre = "música que te gusta";
+    if (recentSongs.isNotEmpty) {
+      final lastSong = recentSongs.first;
+      recommendedGenre = "${lastSong.artist} y similares";
+    }
+
+    final totalPlays = library.getMostPlayedSongs().length;
+    final topSong = library.getMostPlayedSongs().isNotEmpty ? library.getMostPlayedSongs().first.title : "Flowy";
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) {
         return Container(
-          height: MediaQuery.of(context).size.height * 0.7,
+          height: MediaQuery.of(context).size.height * 0.75,
           decoration: BoxDecoration(
-            color: Color.lerp(scheme.surface, Colors.black, 0.8),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            border: Border.all(color: Colors.white10, width: 0.5),
+            color: Color.lerp(scheme.surface, Colors.black, 0.9),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(36)),
+            border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
           ),
           child: Column(
             children: [
               const SizedBox(height: 12),
               Container(
-                width: 40,
+                width: 44,
                 height: 4,
                 decoration: BoxDecoration(
                   color: Colors.white24,
@@ -254,19 +267,20 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 24),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.symmetric(horizontal: 28),
                 child: Row(
                   children: [
                     Text(
-                      'Notificaciones',
+                      'Tus Novedades',
                       style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
                       ),
                     ),
                     const Spacer(),
-                    TextButton(
+                    IconButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cerrar'),
+                      icon: const Icon(Icons.close_rounded, color: Colors.white38),
                     ),
                   ],
                 ),
@@ -274,28 +288,33 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 16),
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   children: [
                     _buildNotifItem(
                       icon: Icons.auto_awesome_rounded,
                       title: 'Tu Mix de Energía',
-                      desc: 'Hemos añadido 12 nuevas canciones que te encantarán basadas en Taylor Swift.',
-                      time: 'Ahora',
+                      desc: 'Hemos actualizado tu mezcla basado en $recommendedGenre.',
+                      time: 'RECIÉN ACTUALIZADO',
                       color: Colors.amber,
                     ),
                     _buildNotifItem(
                       icon: Icons.rocket_launch_rounded,
-                      title: 'Flowy Engine v2.0',
-                      desc: 'El nuevo motor de audio HD ya está activo para mejorar tu experiencia auditiva.',
-                      time: 'Hace 2 horas',
+                      title: 'Audio Engine v2.0',
+                      desc: 'La optimización de bajos y agudos está activa para tus cascos actuales.',
+                      time: 'MOTOR ACTIVO',
                       color: scheme.primary,
                     ),
                     _buildNotifItem(
                       icon: Icons.favorite_rounded,
                       title: 'Fan de la Semana',
-                      desc: '¡Has escuchado más de 50 horas esta semana! Mira tus estadísticas.',
-                      time: 'Ayer',
+                      desc: 'Has escuchado $totalPlays canciones únicas. Tu favorita es "$topSong".',
+                      time: 'RESUMEN SEMANAL',
                       color: Colors.pinkAccent,
+                      showStats: true,
+                      stats: [
+                        _StatItem(label: 'Total Canciones', value: '$totalPlays'),
+                        _StatItem(label: 'Top Artista', value: recentSongs.isNotEmpty ? recentSongs.first.artist : '---'),
+                      ],
                     ),
                   ],
                 ),
@@ -313,52 +332,85 @@ class _HomePageState extends State<HomePage> {
     required String desc,
     required String time,
     required Color color,
+    bool showStats = false,
+    List<_StatItem>? stats,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        color: Colors.white.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 24),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+                        ),
+                        const Spacer(),
+                        Text(
+                          time,
+                          style: TextStyle(color: color.withOpacity(0.7), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      desc,
+                      style: const TextStyle(color: Colors.white54, fontSize: 14, height: 1.5),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  desc,
-                  style: const TextStyle(color: Colors.white54, fontSize: 14, height: 1.4),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  time,
-                  style: const TextStyle(color: Colors.white24, fontSize: 11, fontWeight: FontWeight.bold),
-                ),
-              ],
+          if (showStats && stats != null) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Divider(color: Colors.white.withOpacity(0.05), height: 1),
             ),
-          ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: stats.map((s) => Column(
+                children: [
+                  Text(s.value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
+                  const SizedBox(height: 4),
+                  Text(s.label.toUpperCase(), style: const TextStyle(fontSize: 9, color: Colors.white38, letterSpacing: 1, fontWeight: FontWeight.w700)),
+                ],
+              )).toList(),
+            ),
+          ]
         ],
       ),
     );
   }
+}
+
+class _StatItem {
+  final String label;
+  final String value;
+  _StatItem({required this.label, required this.value});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
