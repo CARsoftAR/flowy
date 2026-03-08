@@ -90,31 +90,8 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ],
               ),
-              actions: [
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    IconButton(
-                      onPressed: () => _showNotifications(context, theme, scheme),
-                      icon: const Icon(Icons.notifications_outlined),
-                    ),
-                    Positioned(
-                      right: 12,
-                      top: 12,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: scheme.primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.black, width: 1.5),
-                        ),
-                      ),
-                    ).animate(onPlay: (c) => c.repeat(reverse: true))
-                        .scale(begin: const Offset(1, 1), end: const Offset(1.2, 1.2), duration: 2.seconds),
-                  ],
-                ),
-                const SizedBox(width: 8),
+              actions: const [
+                SizedBox(width: 8),
               ],
             ),
 
@@ -155,20 +132,6 @@ class _HomePageState extends State<HomePage> {
                   ? const SizedBox.shrink()
                   : FeaturedBanner(songs: _recommendations!.take(5).toList()),
             ),
-
-            // ── Smart Playlists header ─────────────────────────────────
-            const SliverToBoxAdapter(
-              child: SectionHeader(
-                title: 'Mixes para ti',
-                subtitle: 'Basado en lo que escuchas',
-              ),
-            ),
-
-            const SliverToBoxAdapter(
-              child: SmartPlaylistsRow(),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
             // ── Trending Songs header ────────────────────────────────────
             SliverToBoxAdapter(
@@ -312,13 +275,17 @@ class _HomePageState extends State<HomePage> {
                       color: Colors.pinkAccent,
                       showStats: true,
                       stats: [
-                        _StatItem(label: 'Total Canciones', value: '$totalPlays'),
-                        _StatItem(label: 'Top Artista', value: recentSongs.isNotEmpty ? recentSongs.first.artist : '---'),
+                        _StatItem(label: 'Total', value: '$totalPlays'),
+                        _StatItem(
+                          label: recentSongs.isNotEmpty ? 'POR ${recentSongs.first.artist}' : 'ARTISTA', 
+                          value: topSong
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 32),
             ],
           ),
         );
@@ -403,15 +370,15 @@ class _HomePageState extends State<HomePage> {
           ),
           if (showStats && stats != null) ...[
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
+              padding: const EdgeInsets.symmetric(vertical: 16),
               child: Divider(color: Colors.white.withOpacity(0.08), height: 1),
             ),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                stats.isNotEmpty ? _buildStatColumn(stats[0]) : const SizedBox(),
-                const SizedBox(width: 12),
-                stats.length > 1 ? _buildStatColumn(stats[1], flex: 2) : const SizedBox(),
+                _buildStatColumn(stats[0]),
+                const SizedBox(width: 20),
+                _buildStatColumn(stats[1], flex: 3, alignment: CrossAxisAlignment.start),
               ],
             ),
           ]
@@ -420,34 +387,36 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildStatColumn(_StatItem s, {int flex = 1}) {
+  Widget _buildStatColumn(_StatItem s, {int flex = 1, CrossAxisAlignment alignment = CrossAxisAlignment.center}) {
     return Expanded(
       flex: flex,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: alignment,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             s.value, 
             style: const TextStyle(
-              fontSize: 14, 
+              fontSize: 15, 
               fontWeight: FontWeight.w900, 
               color: Colors.white,
               height: 1.2,
+              letterSpacing: -0.4,
             ),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+            textAlign: alignment == CrossAxisAlignment.center ? TextAlign.center : TextAlign.left,
+            maxLines: 3,
+            overflow: TextOverflow.visible,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             s.label.toUpperCase(), 
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 8, 
-              color: Colors.white38, 
+              color: Colors.white.withOpacity(0.4), 
               letterSpacing: 1.2, 
               fontWeight: FontWeight.w800,
             ),
-            textAlign: TextAlign.center,
+            textAlign: alignment == CrossAxisAlignment.center ? TextAlign.center : TextAlign.left,
           ),
         ],
       ),
