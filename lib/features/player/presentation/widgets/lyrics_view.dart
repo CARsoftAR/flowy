@@ -1,11 +1,9 @@
+
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../../../domain/entities/entities.dart';
 import '../../../../data/datasources/lyrics_datasource.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// LyricsView — Auto-scrolling synced lyrics display
-// ─────────────────────────────────────────────────────────────────────────────
 
 class LyricsView extends StatefulWidget {
   final SongEntity song;
@@ -22,7 +20,9 @@ class LyricsView extends StatefulWidget {
 }
 
 class _LyricsViewState extends State<LyricsView> {
-  final ScrollController _scrollController = ScrollController();
+  final ItemScrollController _itemScrollController = ItemScrollController();
+  final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
+  
   LyricsEntity? _lyrics;
   bool _loading = true;
   String? _error;
@@ -49,7 +49,6 @@ class _LyricsViewState extends State<LyricsView> {
     setState(() {
       _loading = true;
       _error = null;
-      _lyrics = null;
     });
 
     final source = LyricsDataSource();
@@ -90,22 +89,13 @@ class _LyricsViewState extends State<LyricsView> {
   }
 
   void _scrollToCurrentLine() {
-    if (!_scrollController.hasClients) return;
-    const itemHeight = 52.0;
-    final targetOffset = (_currentLineIndex * itemHeight) -
-        (_scrollController.position.viewportDimension / 2) +
-        itemHeight;
-    _scrollController.animateTo(
-      targetOffset.clamp(0, _scrollController.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOut,
+    if (!_itemScrollController.isAttached) return;
+    _itemScrollController.scrollTo(
+      index: _currentLineIndex,
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOutCubic,
+      alignment: 0.35, // Position active line slightly above center
     );
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
   }
 
   @override
@@ -114,53 +104,71 @@ class _LyricsViewState extends State<LyricsView> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.lyrics_outlined, color: Colors.white30, size: 48),
-            const SizedBox(height: 12),
-            Text(
-              'Letras no disponibles',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white38,
-                  ),
-            ),
-          ],
-        ),
-      );
+    if (_error != null || _lyrics == null) {
+      return _buildPlaceholder('Letras no disponibles');
     }
 
     final lyrics = _lyrics!;
 
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+    return ScrollablePositionedList.builder(
       itemCount: lyrics.lines.length,
+      itemScrollController: _itemScrollController,
+      itemPositionsListener: _itemPositionsListener,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 64),
       itemBuilder: (context, index) {
         final isActive = index == _currentLineIndex && lyrics.isSynced;
         final line = lyrics.lines[index];
 
-        return AnimatedDefaultTextStyle(
-          duration: const Duration(milliseconds: 300),
-          style: TextStyle(
-            fontSize: isActive ? 22 : 18,
-            fontWeight:
-                isActive ? FontWeight.w700 : FontWeight.w400,
-            color: isActive ? Colors.white : Colors.white38,
-            height: 1.4,
-            fontFamily: 'Outfit',
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Text(
-              line.text.isEmpty ? '•  •  •' : line.text,
-              textAlign: TextAlign.center,
+        return GestureDetector(
+          onTap: () {
+            // Future: seek to this line
+          },
+          child: AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutCubic,
+            style: TextStyle(
+              fontSize: isActive ? 32 : 24,
+              fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+              color: isActive ? Colors.white : Colors.white24,
+              height: 1.5,
+              fontFamily: 'Outfit',
+              shadows: isActive ? [
+                Shadow(
+                  color: Colors.white.withOpacity(0.5),
+                  blurRadius: 12,
+                )
+              ] : [],
             ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  line.text.isEmpty ? '•  •  •' : line.text,
+                ),
+              ),
+            ).animate(target: isActive ? 1 : 0)
+             .scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05))
+             .blur(begin: const Offset(2, 2), end: const Offset(0, 0)),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPlaceholder(String message) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.lyrics_outlined, color: Colors.white10, size: 64),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: const TextStyle(color: Colors.white24, fontSize: 16),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -8,6 +8,7 @@ import '../../../../domain/repositories/repositories.dart';
 import '../../../../core/di/injection.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../library/presentation/providers/library_provider.dart';
+import '../providers/search_history_provider.dart';
 import '../../../home/presentation/widgets/song_tile.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -88,8 +89,12 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _search(String query) async {
-    if (query.trim().isEmpty) return;
+    final q = query.trim();
+    if (q.isEmpty) return;
     _focusNode.unfocus();
+
+    // Save to history
+    context.read<SearchHistoryProvider>().addQuery(q);
 
     setState(() {
       _isSearching = true;
@@ -97,7 +102,7 @@ class _SearchPageState extends State<SearchPage> {
       _results = null;
     });
 
-    final result = await _repo.search(query.trim());
+    final result = await _repo.search(q);
     if (!mounted) return;
 
     result.fold(
@@ -270,6 +275,7 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildEmptyState(ThemeData theme, ColorScheme scheme) {
+    final history = context.watch<SearchHistoryProvider>().history;
     final genres = [
       ('🎸', 'Rock'),
       ('🎵', 'Pop'),
@@ -287,6 +293,40 @@ class _SearchPageState extends State<SearchPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (history.isNotEmpty) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Busquedas recientes', style: theme.textTheme.titleMedium),
+                TextButton(
+                  onPressed: () => context.read<SearchHistoryProvider>().clearHistory(),
+                  child: const Text('Limpiar', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 40,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: history.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  return ActionChip(
+                    label: Text(history[index]),
+                    onPressed: () {
+                      _controller.text = history[index];
+                      _search(history[index]);
+                    },
+                    backgroundColor: scheme.surfaceContainerHighest.withOpacity(0.5),
+                    side: BorderSide.none,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
           const SizedBox(height: 8),
           Text('Explorar géneros', style: theme.textTheme.titleLarge),
           const SizedBox(height: 16),

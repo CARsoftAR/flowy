@@ -1,15 +1,22 @@
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/ambient_background.dart';
 import '../../../../domain/entities/entities.dart';
 import '../providers/player_provider.dart' as pp;
 import 'package:flowy/features/library/presentation/providers/library_provider.dart';
 import '../widgets/audio_wave_bar.dart';
 import '../widgets/lyrics_view.dart';
+import '../widgets/equalizer_sheet.dart';
+import '../widgets/queue_sheet.dart';
+import '../widgets/sleep_timer_sheet.dart';
+import '../providers/audio_effects_provider.dart';
+import '../providers/sleep_timer_provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PlayerPage — Full-screen immersive player
@@ -65,7 +72,11 @@ class _PlayerPageState extends State<PlayerPage>
 
         return Scaffold(
           backgroundColor: Colors.transparent,
-          body: _buildBody(context, player, song),
+          body: AmbientBackground(
+            imageUrl: song.bestThumbnail,
+            overlayOpacity: 0.2,
+            child: _buildBody(context, player, song),
+          ),
         );
       },
     );
@@ -76,13 +87,7 @@ class _PlayerPageState extends State<PlayerPage>
     return Stack(
       fit: StackFit.expand,
       children: [
-        // ── Blurred full-screen album art background ───────────────────
-        _buildBackground(song),
-
-        // ── Dark overlay + gradient ────────────────────────────────────
-        Container(
-          decoration: FlowyTheme.playerGradient(_dominantColor),
-        ),
+        // Content is now wrapped by AmbientBackground in build()
 
         // ── Actual content ─────────────────────────────────────────────
         SafeArea(
@@ -167,8 +172,38 @@ class _PlayerPageState extends State<PlayerPage>
             ),
           ),
           IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.more_vert_rounded),
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                backgroundColor: Colors.transparent,
+                isScrollControlled: true,
+                builder: (context) => const QueueSheet(),
+              );
+            },
+            icon: const Icon(Icons.playlist_play_rounded),
+            color: Colors.white,
+          ),
+          IconButton(
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                backgroundColor: Colors.transparent,
+                isScrollControlled: true,
+                builder: (context) => const EqualizerSheet(),
+              );
+            },
+            icon: const Icon(Icons.tune_rounded),
+            color: Colors.white,
+          ),
+          IconButton(
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                backgroundColor: Colors.transparent,
+                builder: (context) => const SleepTimerSheet(),
+              );
+            },
+            icon: const Icon(Icons.nights_stay_rounded),
             color: Colors.white,
           ),
         ],
@@ -298,6 +333,7 @@ class _PlayerPageState extends State<PlayerPage>
             ),
             child: Slider(
               value: player.progress,
+              onChangeStart: (_) => HapticFeedback.selectionClick(),
               onChanged: (v) {
                 final duration = player.duration;
                 final newPos = Duration(
@@ -348,7 +384,10 @@ class _PlayerPageState extends State<PlayerPage>
         children: [
           // Shuffle
           IconButton(
-            onPressed: player.toggleShuffle,
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              player.toggleShuffle();
+            },
             icon: Icon(
               Icons.shuffle_rounded,
               color:
@@ -359,7 +398,10 @@ class _PlayerPageState extends State<PlayerPage>
 
           // Previous
           IconButton(
-            onPressed: player.skipToPrevious,
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              player.skipToPrevious();
+            },
             icon: const Icon(Icons.skip_previous_rounded,
                 color: Colors.white, size: 36),
           ),
@@ -369,14 +411,20 @@ class _PlayerPageState extends State<PlayerPage>
 
           // Next
           IconButton(
-            onPressed: player.skipToNext,
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              player.skipToNext();
+            },
             icon: const Icon(Icons.skip_next_rounded,
                 color: Colors.white, size: 36),
           ),
 
           // Repeat
           IconButton(
-            onPressed: player.cycleRepeatMode,
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              player.cycleRepeatMode();
+            },
             icon: Icon(
               player.repeatMode == pp.RepeatMode.one
                   ? Icons.repeat_one_rounded
@@ -411,7 +459,10 @@ class _LargePlayButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: player.togglePlayPause,
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        player.togglePlayPause();
+      },
       child: AnimatedContainer(
         duration: AppConstants.animationFast,
         width: 70,

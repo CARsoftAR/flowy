@@ -1,6 +1,6 @@
-import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:palette_generator/palette_generator.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ class FlowyTheme {
       textTheme: _buildTextTheme(scheme),
 
       // ── Scaffold & Background ───────────────────────────────────────────
-      scaffoldBackgroundColor: FlowyColors.surface,
+      scaffoldBackgroundColor: scheme.surface,
 
       // ── AppBar ──────────────────────────────────────────────────────────
       appBarTheme: AppBarTheme(
@@ -69,11 +69,10 @@ class FlowyTheme {
           systemNavigationBarColor: FlowyColors.surface,
           systemNavigationBarIconBrightness: Brightness.light,
         ),
-        titleTextStyle: TextStyle(
+        titleTextStyle: GoogleFonts.outfit(
           fontSize: 20,
           fontWeight: FontWeight.w600,
           color: scheme.onSurface,
-          fontFamily: 'sans-serif',
         ),
         iconTheme: IconThemeData(color: scheme.onSurface),
       ),
@@ -93,10 +92,9 @@ class FlowyTheme {
         backgroundColor: FlowyColors.surfaceVariant.withOpacity(0.95),
         indicatorColor: scheme.primary.withOpacity(0.2),
         labelTextStyle: WidgetStateProperty.all(
-          const TextStyle(
+          GoogleFonts.outfit(
             fontSize: 11,
             fontWeight: FontWeight.w500,
-            fontFamily: 'sans-serif',
           ),
         ),
         iconTheme: WidgetStateProperty.resolveWith((states) {
@@ -140,80 +138,81 @@ class FlowyTheme {
 
   // ── Text Theme ─────────────────────────────────────────────────────────────
   static TextTheme _buildTextTheme(ColorScheme scheme) {
-    return TextTheme(
-      displayLarge: TextStyle(
+    final baseTheme = GoogleFonts.outfitTextTheme();
+    return baseTheme.copyWith(
+      displayLarge: baseTheme.displayLarge?.copyWith(
         fontSize: 57,
         fontWeight: FontWeight.w300,
         letterSpacing: -0.25,
         color: scheme.onSurface,
       ),
-      displayMedium: TextStyle(
+      displayMedium: baseTheme.displayMedium?.copyWith(
         fontSize: 45,
         fontWeight: FontWeight.w300,
         color: scheme.onSurface,
       ),
-      headlineLarge: TextStyle(
+      headlineLarge: baseTheme.headlineLarge?.copyWith(
         fontSize: 32,
         fontWeight: FontWeight.w700,
         letterSpacing: -0.5,
         color: scheme.onSurface,
       ),
-      headlineMedium: TextStyle(
+      headlineMedium: baseTheme.headlineMedium?.copyWith(
         fontSize: 24,
         fontWeight: FontWeight.w600,
         color: scheme.onSurface,
       ),
-      headlineSmall: TextStyle(
+      headlineSmall: baseTheme.headlineSmall?.copyWith(
         fontSize: 20,
         fontWeight: FontWeight.w600,
         color: scheme.onSurface,
       ),
-      titleLarge: TextStyle(
+      titleLarge: baseTheme.titleLarge?.copyWith(
         fontSize: 18,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.1,
         color: scheme.onSurface,
       ),
-      titleMedium: TextStyle(
+      titleMedium: baseTheme.titleMedium?.copyWith(
         fontSize: 16,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.1,
         color: scheme.onSurface,
       ),
-      titleSmall: TextStyle(
+      titleSmall: baseTheme.titleSmall?.copyWith(
         fontSize: 14,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.1,
         color: scheme.onSurface,
       ),
-      bodyLarge: TextStyle(
+      bodyLarge: baseTheme.bodyLarge?.copyWith(
         fontSize: 16,
         fontWeight: FontWeight.w400,
         color: scheme.onSurface.withOpacity(0.85),
       ),
-      bodyMedium: TextStyle(
+      bodyMedium: baseTheme.bodyMedium?.copyWith(
         fontSize: 14,
         fontWeight: FontWeight.w400,
         color: scheme.onSurface.withOpacity(0.75),
       ),
-      bodySmall: TextStyle(
+      bodySmall: baseTheme.bodySmall?.copyWith(
         fontSize: 12,
         fontWeight: FontWeight.w400,
         color: scheme.onSurface.withOpacity(0.55),
       ),
-      labelLarge: TextStyle(
+      labelLarge: baseTheme.labelLarge?.copyWith(
         fontSize: 13,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.1,
         color: scheme.onSurface,
       ),
-      labelMedium: TextStyle(
+      labelMedium: baseTheme.labelMedium?.copyWith(
         fontSize: 11,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.5,
         color: scheme.onSurface.withOpacity(0.7),
       ),
-      labelSmall: TextStyle(
+      labelSmall: baseTheme.labelSmall?.copyWith(
         fontSize: 10,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.5,
@@ -228,15 +227,25 @@ class FlowyTheme {
     double opacity = 0.12,
     Color? tintColor,
     double borderWidth = 0.5,
+    bool showShadow = false,
   }) {
     final tint = tintColor ?? Colors.white;
     return BoxDecoration(
       color: tint.withOpacity(opacity),
       borderRadius: BorderRadius.circular(borderRadius),
       border: Border.all(
-        color: tint.withOpacity(0.15),
+        color: tint.withOpacity(0.2),
         width: borderWidth,
       ),
+      boxShadow: showShadow
+          ? [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ]
+          : null,
     );
   }
 
@@ -321,6 +330,6 @@ class DynamicPaletteService {
     return ColorScheme.fromSeed(
       seedColor: dominantColor,
       brightness: Brightness.dark,
-    ).harmonized();
+    );
   }
 }

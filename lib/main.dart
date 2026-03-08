@@ -15,10 +15,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'features/home/presentation/pages/home_page.dart';
 import 'features/library/presentation/pages/library_page.dart';
 import 'features/library/presentation/providers/library_provider.dart';
+import 'features/library/presentation/providers/download_provider.dart';
 import 'features/player/presentation/providers/player_provider.dart';
+import 'features/player/presentation/providers/audio_effects_provider.dart';
+import 'features/player/presentation/providers/sleep_timer_provider.dart';
 import 'features/player/presentation/widgets/mini_player.dart';
 import 'features/search/presentation/pages/search_page.dart';
+import 'features/search/presentation/providers/search_history_provider.dart';
 import 'features/splash/presentation/pages/splash_page.dart';
+import 'core/theme/ambient_background.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // main.dart — App entry point
@@ -57,9 +62,13 @@ Future<void> _init() async {
 
   // ── Initialize audio_service ─────────────────────────────────────────────
   final musicRepo = MusicRepositoryImpl();
+  final prefs = await SharedPreferences.getInstance();
 
   final audioHandler = await AudioService.init<FlowyAudioHandler>(
-    builder: () => FlowyAudioHandler(musicRepository: musicRepo),
+    builder: () => FlowyAudioHandler(
+      musicRepository: musicRepo,
+      sharedPreferences: prefs,
+    ),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.flowy.audio.channel',
       androidNotificationChannelName: 'TitiSonics Music',
@@ -68,8 +77,6 @@ Future<void> _init() async {
       notificationColor: Color(0xFF7C4DFF),
     ),
   );
-
-  final prefs = await SharedPreferences.getInstance();
 
   // ── Dependency injection ─────────────────────────────────────────────────
   await configureDependencies(audioHandler: audioHandler);
@@ -82,6 +89,18 @@ Future<void> _init() async {
         ),
         ChangeNotifierProvider<LibraryProvider>(
           create: (_) => LibraryProvider(prefs),
+        ),
+        ChangeNotifierProvider<DownloadProvider>(
+          create: (_) => DownloadProvider(),
+        ),
+        ChangeNotifierProvider<SearchHistoryProvider>(
+          create: (_) => SearchHistoryProvider(),
+        ),
+        ChangeNotifierProvider<AudioEffectsProvider>(
+          create: (_) => AudioEffectsProvider(handler: sl<FlowyAudioHandler>()),
+        ),
+        ChangeNotifierProvider<SleepTimerProvider>(
+          create: (_) => SleepTimerProvider(sl<FlowyAudioHandler>()),
         ),
       ],
       child: const TitiSonicsApp(),
@@ -166,18 +185,26 @@ class _TitiSonicsAppState extends State<TitiSonicsApp> {
   Widget build(BuildContext context) {
     return DynamicColorBuilder(
       builder: (lightScheme, darkScheme) {
-        final darkColorScheme = darkScheme?.harmonized() ??
+        // Fallback for dark scheme if dynamic not available
+        final darkColorScheme = darkScheme ??
             ColorScheme.fromSeed(
               seedColor: FlowyColors.brandSeed,
               brightness: Brightness.dark,
             );
 
+        // Fallback for light scheme if dynamic not available
+        final lightColorScheme = lightScheme ??
+            ColorScheme.fromSeed(
+              seedColor: FlowyColors.brandSeed,
+              brightness: Brightness.light,
+            );
+
         return MaterialApp(
-          title: AppConstants.appName,
+          title: 'Flowy',
           debugShowCheckedModeBanner: false,
-          theme: FlowyTheme.buildTheme(),
+          theme: FlowyTheme.buildTheme(colorScheme: lightColorScheme),
           darkTheme: FlowyTheme.buildTheme(colorScheme: darkColorScheme),
-          themeMode: ThemeMode.dark,
+          themeMode: ThemeMode.dark, // Default to dark since it's a music app
           home: _showSplash
               ? SplashPage(onFinish: () => setState(() => _showSplash = false))
               : const FlowyShell(),
@@ -209,94 +236,68 @@ class _FlowyShellState extends State<FlowyShell> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    // Listen for sync events from the Player (coming from Notification)
+    final player = context.read<PlayerProvider>();
+    final library = context.read<LibraryProvider>();
+    
+    player.addListener(() {
+      // If the player status changed or a custom event happened, refresh library
+      // This is a simple way to keep them in sync
+      library.refreshData();
+    });
 
-    return Scaffold(
-      backgroundColor: FlowyColors.surface,
-      body: Stack(
-        children: [
-          // ── Ambient background glow ─────────────────────────────────────
-          Positioned.fill(
-            child: CustomPaint(painter: _AmbientGlowPainter(scheme.primary)),
+    return Consumer<PlayerProvider>(
+      builder: (context, player, child) {
+        return Scaffold(
+          backgroundColor: FlowyColors.surface,
+          body: AmbientBackground(
+            imageUrl: player.currentSong?.bestThumbnail,
+            overlayOpacity: 0.7,
+            child: Stack(
+              children: [
+                // ── Pages ───────────────────────────────────────────────────────
+                IndexedStack(
+                  index: _selectedIndex,
+                  children: _pages,
+                ),
+
+                // ── MiniPlayer ──────────────────────────────────────────────────
+                Positioned(
+                  bottom: AppConstants.navBarHeight + 4,
+                  left: 0,
+                  right: 0,
+                  child: const MiniPlayer(),
+                ),
+              ],
+            ),
           ),
 
-          // ── Pages ───────────────────────────────────────────────────────
-          IndexedStack(
-            index: _selectedIndex,
-            children: _pages,
+          // ── NavigationBar ───────────────────────────────────────────────────
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home_rounded),
+                label: 'Inicio',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.search_outlined),
+                selectedIcon: Icon(Icons.search_rounded),
+                label: 'Buscar',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.library_music_outlined),
+                selectedIcon: Icon(Icons.library_music_rounded),
+                label: 'Biblioteca',
+              ),
+            ],
           ),
-
-          // ── MiniPlayer ──────────────────────────────────────────────────
-          Positioned(
-            bottom: AppConstants.navBarHeight + 4,
-            left: 0,
-            right: 0,
-            child: const MiniPlayer(),
-          ),
-        ],
-      ),
-
-      // ── NavigationBar ───────────────────────────────────────────────────
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Inicio',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.search_outlined),
-            selectedIcon: Icon(Icons.search_rounded),
-            label: 'Buscar',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.library_music_outlined),
-            selectedIcon: Icon(Icons.library_music_rounded),
-            label: 'Biblioteca',
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
-// ── Ambient glow background ──────────────────────────────────────────────────
-
-class _AmbientGlowPainter extends CustomPainter {
-  final Color color;
-  _AmbientGlowPainter(this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..shader = RadialGradient(
-        center: Alignment.topLeft,
-        radius: 0.8,
-        colors: [
-          color.withOpacity(0.08),
-          Colors.transparent,
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-
-    canvas.drawRect(
-        Rect.fromLTWH(0, 0, size.width, size.height), paint);
-
-    // Second glow in opposite corner
-    final paint2 = Paint()
-      ..shader = RadialGradient(
-        center: Alignment.bottomRight,
-        radius: 0.7,
-        colors: [
-          FlowyColors.brandAccent.withOpacity(0.05),
-          Colors.transparent,
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-    canvas.drawRect(
-        Rect.fromLTWH(0, 0, size.width, size.height), paint2);
-  }
-
-  @override
-  bool shouldRepaint(_AmbientGlowPainter old) => old.color != color;
-}
+// _AmbientGlowPainter was removed in favor of AmbientBackground widget

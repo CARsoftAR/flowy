@@ -96,6 +96,15 @@ class PlayerProvider extends ChangeNotifier {
       }
       notifyListeners();
     });
+    
+    // Listen for custom events from AudioHandler (e.g., favorite toggled from notification)
+    _handler.customEvent.listen((event) {
+      if (event is Map && event['type'] == 'favorite_toggled') {
+        // We can't reach LibraryProvider directly here easy, 
+        // but we can notify the UI layer to refresh.
+        notifyListeners();
+      }
+    });
   }
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -165,6 +174,16 @@ class PlayerProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  List<SongEntity> get currentQueue => _handler.currentQueue;
+  int get currentIndex => _handler.currentQueueIndex;
+
+  void moveQueueItem(int oldIndex, int newIndex) {
+    _handler.reorderQueue(oldIndex, newIndex);
+    notifyListeners();
+  }
+
+  Future<void> playAtIndex(int index) => _handler.skipToQueueItem(index);
 
   @override
   void dispose() {

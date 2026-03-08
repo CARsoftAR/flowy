@@ -5,6 +5,7 @@ import '../../../../core/theme/app_theme.dart';
 import 'package:flowy/domain/entities/entities.dart';
 import 'package:flowy/features/player/presentation/providers/player_provider.dart';
 import 'package:flowy/features/library/presentation/providers/library_provider.dart';
+import 'package:flowy/features/library/presentation/providers/download_provider.dart';
 import 'package:flowy/features/home/presentation/widgets/song_tile.dart';
 import 'package:flowy/features/home/presentation/widgets/section_header.dart';
 
@@ -37,7 +38,7 @@ class _LibraryPageState extends State<LibraryPage> {
             slivers: [
               SliverAppBar(
                 title: Text(
-                  _viewIndex == 0 ? 'Tu Biblioteca' : (_viewIndex == 1 ? 'Me gusta' : 'Recientes'),
+                  _viewIndex == 0 ? 'Tu Biblioteca' : (_viewIndex == 1 ? 'Me gusta' : (_viewIndex == 2 ? 'Recientes' : 'Descargas')),
                   style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 floating: true,
@@ -78,6 +79,14 @@ class _LibraryPageState extends State<LibraryPage> {
                         isSelected: _viewIndex == 2,
                         onTap: () => setState(() => _viewIndex = _viewIndex == 2 ? 0 : 2),
                       ),
+                      const SizedBox(width: 10),
+                      _QuickActionChip(
+                        icon: Icons.download_done_rounded,
+                        label: 'Descargas',
+                        color: scheme.primary,
+                        isSelected: _viewIndex == 3,
+                        onTap: () => setState(() => _viewIndex = _viewIndex == 3 ? 0 : 3),
+                      ),
                     ],
                   ),
                 ),
@@ -93,9 +102,15 @@ class _LibraryPageState extends State<LibraryPage> {
               if (_viewIndex == 0)
                 _buildEmptyPlaylists(theme, scheme),
 
-              // ── Liked Songs / Recently Played List ───────────────────────────
+              // ── Liked Songs / Recently Played / Downloads List ───────────────────────────
               if (_viewIndex != 0)
-                _buildLibraryList(_viewIndex == 1 ? library.likedSongs : library.recentlyPlayed),
+                _buildLibraryList(
+                  _viewIndex == 1 
+                    ? library.likedSongs 
+                    : (_viewIndex == 2 
+                        ? library.recentlyPlayed 
+                        : context.watch<DownloadProvider>().downloadedSongs)
+                ),
 
               const SliverToBoxAdapter(child: SizedBox(height: 120)),
             ],

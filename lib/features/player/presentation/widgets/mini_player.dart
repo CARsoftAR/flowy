@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_constants.dart';
@@ -151,7 +152,10 @@ class _MiniPlayerState extends State<MiniPlayer>
                   _openFullPlayer(context);
                 }
               },
-              onTap: () => _openFullPlayer(context),
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                _openFullPlayer(context);
+              },
               child: _MiniPlayerContent(song: song, player: player),
             ),
           ),
@@ -267,14 +271,20 @@ class _MiniPlayerContent extends StatelessWidget {
                   children: [
                     _ControlButton(
                       icon: Icons.skip_previous_rounded,
-                      onTap: player.skipToPrevious,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        player.skipToPrevious();
+                      },
                     ),
                     const SizedBox(width: 4),
                     _PlayPauseButton(player: player),
                     const SizedBox(width: 4),
                     _ControlButton(
                       icon: Icons.skip_next_rounded,
-                      onTap: player.skipToNext,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        player.skipToNext();
+                      },
                     ),
                   ],
                 ),
@@ -310,7 +320,10 @@ class _PlayPauseButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: player.togglePlayPause,
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        player.togglePlayPause();
+      },
       child: Container(
         width: 40,
         height: 40,

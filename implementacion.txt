@@ -1,0 +1,25 @@
+. Estética Visual y Pulido (El "Factor Wow")
+Fondo Ambiental Dinámico: En lugar de un fondo negro sólido, usar un degradado difuminado (Mesh Gradient) que cambie suavemente según el color de la carátula de la canción que suena.
+Animaciones Hero: Que la carátula de la canción "vuele" desde la lista hacia el reproductor cuando lo abres.
+Tipografía Premium: Cambiar la fuente estándar por una más moderna y elegante como Inter, Outfit o Montserrat.
+Micro-interacciones:
+Botones que reaccionan con pequeñas vibraciones (Haptic Feedback).
+Efectos de "Glassmorphism" (vidrio esmerilado) más profundos en el mini-reproductor y menús.
+Barras de progreso que brillan o tienen un destello sutil.
+
+2. Funciones de Reproducción Avanzadas
+Ecualizador Personalizado: Un ecualizador de 5 o 10 bandas con preajustes (Rock, Pop, Bass Boost).
+Crossfade (Transición Suave): Que el final de una canción se mezcle con el inicio de la siguiente para que nunca haya silencio.
+Visualizador de Audio: Una animación de ondas de sonido que reaccione al ritmo de la música en tiempo real.
+Letras Sincronizadas (Modo Karaoke): Implementar un sistema donde las letras se desplacen y resalten al ritmo de la voz.
+
+3. Experiencia de Usuario (UX) Premium
+Modo Offline (Descargas): Permitir que el usuario descargue sus canciones favoritas para escucharlas sin internet (usando caché avanzado).
+Temporizador de Apagado (Sleep Timer): Ideal para quienes escuchan música antes de dormir.
+Gestión de Cola con Drag & Drop: Poder reordenar las canciones que van a sonar simplemente arrastrándolas.
+Búsqueda Inteligente: Sugerencias en tiempo real mientras el usuario escribe, con historial de búsquedas recientes.
+
+4. Inteligencia y Personalización
+Smart Playlists: Listas generadas automáticamente ✅ (Implementadas en SmartPlaylistsRow y LibraryProvider).
+Temas Dinámicos (Material You): Que toda la aplicación cambie de color según el fondo de pantalla ✅ (Configurado en main.dart con dynamic_color).
+Notificaciones de Control Rediseñadas: ✅ (Control dinámico con arte de álbum, soporte para Android 12+ palette, y botón de "Me gusta" integrado directamente en la notificación).

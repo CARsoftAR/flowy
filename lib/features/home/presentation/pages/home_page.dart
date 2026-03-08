@@ -11,6 +11,7 @@ import '../../../library/presentation/providers/library_provider.dart';
 import '../widgets/song_tile.dart';
 import '../widgets/section_header.dart';
 import '../widgets/featured_banner.dart';
+import '../widgets/smart_playlists_row.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HomePage — Discovery & Recommendations
@@ -135,6 +136,20 @@ class _HomePageState extends State<HomePage> {
                   ? const SizedBox.shrink()
                   : FeaturedBanner(songs: _recommendations!.take(5).toList()),
             ),
+
+            // ── Smart Playlists header ─────────────────────────────────
+            const SliverToBoxAdapter(
+              child: SectionHeader(
+                title: 'Mixes para ti',
+                subtitle: 'Basado en lo que escuchas',
+              ),
+            ),
+
+            const SliverToBoxAdapter(
+              child: SmartPlaylistsRow(),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
             // ── Trending Songs header ────────────────────────────────────
             SliverToBoxAdapter(
