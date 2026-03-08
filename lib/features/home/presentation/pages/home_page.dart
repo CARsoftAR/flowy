@@ -372,7 +372,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     const SizedBox(height: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: color.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(8),
@@ -403,40 +403,52 @@ class _HomePageState extends State<HomePage> {
           ),
           if (showStats && stats != null) ...[
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Divider(color: Colors.white.withOpacity(0.05), height: 1),
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Divider(color: Colors.white.withOpacity(0.08), height: 1),
             ),
             Row(
-              children: stats.map((s) => Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      s.value, 
-                      style: const TextStyle(
-                        fontSize: 18, 
-                        fontWeight: FontWeight.w900, 
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      s.label.toUpperCase(), 
-                      style: const TextStyle(
-                        fontSize: 9, 
-                        color: Colors.white38, 
-                        letterSpacing: 1, 
-                        fontWeight: FontWeight.w700,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              )).toList(),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                stats.isNotEmpty ? _buildStatColumn(stats[0]) : const SizedBox(),
+                const SizedBox(width: 12),
+                stats.length > 1 ? _buildStatColumn(stats[1], flex: 2) : const SizedBox(),
+              ],
             ),
           ]
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatColumn(_StatItem s, {int flex = 1}) {
+    return Expanded(
+      flex: flex,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            s.value, 
+            style: const TextStyle(
+              fontSize: 14, 
+              fontWeight: FontWeight.w900, 
+              color: Colors.white,
+              height: 1.2,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            s.label.toUpperCase(), 
+            style: const TextStyle(
+              fontSize: 8, 
+              color: Colors.white38, 
+              letterSpacing: 1.2, 
+              fontWeight: FontWeight.w800,
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
