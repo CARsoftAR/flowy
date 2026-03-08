@@ -247,4 +247,20 @@ class MusicRepositoryImpl implements MusicRepository {
       return Left(YoutubeFailure('Charts unavailable'));
     }
   }
+
+  @override
+  FutureEither<Map<String, dynamic>> getVideoDetails(String videoId) async {
+    try {
+      final video = await _yt.videos.get(videoId);
+      return Right({
+        'id': video.id.value,
+        'title': video.title,
+        'description': video.description,
+        'author': video.author,
+        'duration': video.duration,
+      });
+    } catch (e) {
+      return Left(YoutubeFailure('Could not fetch video details'));
+    }
+  }
 }

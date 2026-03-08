@@ -8,13 +8,16 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/ambient_background.dart';
 import '../../../../domain/entities/entities.dart';
-import '../providers/player_provider.dart' as pp;
+import 'package:flowy/features/player/presentation/providers/player_provider.dart' as pp;
+import 'package:flowy/features/library/presentation/providers/download_provider.dart';
 import 'package:flowy/features/library/presentation/providers/library_provider.dart';
 import '../widgets/audio_wave_bar.dart';
 import '../widgets/lyrics_view.dart';
 import '../widgets/equalizer_sheet.dart';
 import '../widgets/queue_sheet.dart';
 import '../widgets/sleep_timer_sheet.dart';
+import '../widgets/playback_speed_sheet.dart';
+import '../widgets/chapter_sheet.dart';
 import '../providers/audio_effects_provider.dart';
 import '../providers/sleep_timer_provider.dart';
 
@@ -32,7 +35,6 @@ class PlayerPage extends StatefulWidget {
 class _PlayerPageState extends State<PlayerPage>
     with TickerProviderStateMixin {
   late final AnimationController _artworkController;
-  Color _dominantColor = FlowyColors.brandSeed;
   bool _showLyrics = false;
 
   @override
@@ -42,25 +44,12 @@ class _PlayerPageState extends State<PlayerPage>
       vsync: this,
       duration: const Duration(seconds: 20),
     )..repeat();
-    _extractColor();
   }
 
   @override
   void dispose() {
     _artworkController.dispose();
     super.dispose();
-  }
-
-  Future<void> _extractColor() async {
-    final player = context.read<pp.PlayerProvider>();
-    final song = player.currentSong;
-    if (song == null) return;
-
-    final color = await DynamicPaletteService()
-        .getDominantColor(song.bestThumbnail);
-    if (color != null && mounted) {
-      setState(() => _dominantColor = color);
-    }
   }
 
   @override
@@ -74,6 +63,7 @@ class _PlayerPageState extends State<PlayerPage>
           backgroundColor: Colors.transparent,
           body: AmbientBackground(
             imageUrl: song.bestThumbnail,
+            dominantColor: player.dominantColor,
             overlayOpacity: 0.2,
             child: _buildBody(context, player, song),
           ),
@@ -102,7 +92,7 @@ class _PlayerPageState extends State<PlayerPage>
                   duration: AppConstants.animationNormal,
                   child: _showLyrics
                       ? LyricsView(song: song, position: player.position)
-                      : _buildArtworkSection(song),
+                      : _buildArtworkSection(song, player.dominantColor),
                 ),
               ),
 
@@ -113,7 +103,7 @@ class _PlayerPageState extends State<PlayerPage>
               // Audio wave bars
               AudioWaveBar(
                 isPlaying: player.isPlaying,
-                color: _dominantColor,
+                color: player.dominantColor,
               ),
               const SizedBox(height: 8),
 
@@ -127,7 +117,91 @@ class _PlayerPageState extends State<PlayerPage>
             ],
           ),
         ),
+
+        // ── Resume Prompt Layer ──────────────────────────────────────
+        if (player.resumeRequest != null)
+          _buildResumePrompt(context, player),
       ],
+    );
+  }
+
+  Widget _buildResumePrompt(BuildContext context, pp.PlayerProvider player) {
+    final req = player.resumeRequest!;
+    final seconds = req['seconds'] as int? ?? 0;
+    final timeStr = _formatDuration(Duration(seconds: seconds));
+
+    return Positioned(
+      bottom: 120,
+      left: 20,
+      right: 20,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.85),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: player.dominantColor.withOpacity(0.3), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: player.dominantColor.withOpacity(0.15),
+              blurRadius: 30,
+              spreadRadius: 5,
+            )
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: player.dominantColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.history_rounded, color: player.dominantColor, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Text(
+                    'Retomar donde lo dejaste',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: player.dominantColor.withOpacity(0.8),
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  Text(
+                    'Continuar desde $timeStr',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: () => player.clearResumeRequest(),
+              child: Text('Ignorar', style: TextStyle(color: Colors.white.withOpacity(0.5))),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                player.seekTo(Duration(seconds: seconds));
+                player.clearResumeRequest();
+                HapticFeedback.mediumImpact();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: player.dominantColor,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                elevation: 0,
+              ),
+              child: const Text('SI', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
+            ),
+          ],
+        ),
+      ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOutBack),
     );
   }
 
@@ -148,6 +222,7 @@ class _PlayerPageState extends State<PlayerPage>
   // ── Top Bar ───────────────────────────────────────────────────────────────
 
   Widget _buildTopBar(BuildContext context) {
+    final player = context.watch<pp.PlayerProvider>();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
@@ -157,19 +232,29 @@ class _PlayerPageState extends State<PlayerPage>
             icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 32),
             color: Colors.white,
           ),
-          Expanded(
-            child: Column(
-              children: [
-                Text(
-                  'REPRODUCIENDO AHORA',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Colors.white60,
-                        letterSpacing: 2,
-                        fontSize: 10,
-                      ),
-                ),
-              ],
+          const Spacer(),
+          if (player.chapters.isNotEmpty)
+            IconButton(
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => const ChapterSheet(),
+                );
+              },
+              icon: const Icon(Icons.bookmarks_rounded),
+              color: player.dominantColor,
             ),
+          IconButton(
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                backgroundColor: Colors.transparent,
+                builder: (context) => const PlaybackSpeedSheet(),
+              );
+            },
+            icon: const Icon(Icons.speed_rounded),
+            color: Colors.white,
           ),
           IconButton(
             onPressed: () {
@@ -211,9 +296,7 @@ class _PlayerPageState extends State<PlayerPage>
     );
   }
 
-  // ── Artwork ───────────────────────────────────────────────────────────────
-
-  Widget _buildArtworkSection(SongEntity song) {
+  Widget _buildArtworkSection(SongEntity song, Color dominantColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
       child: AspectRatio(
@@ -226,7 +309,7 @@ class _PlayerPageState extends State<PlayerPage>
               duration: AppConstants.animationNormal,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(24),
-                boxShadow: FlowyTheme.glowShadow(_dominantColor),
+                boxShadow: FlowyTheme.glowShadow(dominantColor),
               ),
               clipBehavior: Clip.antiAlias,
               child: CachedNetworkImage(
@@ -237,7 +320,7 @@ class _PlayerPageState extends State<PlayerPage>
                     color: FlowyColors.surfaceContainer,
                     gradient: LinearGradient(
                       colors: [
-                        _dominantColor.withOpacity(0.3),
+                        dominantColor.withOpacity(0.3),
                         FlowyColors.surfaceContainer,
                       ],
                     ),
@@ -294,17 +377,68 @@ class _PlayerPageState extends State<PlayerPage>
               ],
             ),
           ),
-          Consumer<LibraryProvider>(
-            builder: (context, library, _) {
+          Consumer2<LibraryProvider, DownloadProvider>(
+            builder: (context, library, download, _) {
               final isLiked = library.isLiked(song.id);
-              final scheme = Theme.of(context).colorScheme;
-              return IconButton(
-                onPressed: () => library.toggleLike(song),
-                icon: Icon(
-                  isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                  color: isLiked ? scheme.primary : Colors.white60,
-                ),
-                iconSize: 26,
+              final isDownloaded = download.isDownloaded(song.id);
+              final progress = download.getProgress(song.id);
+              final isDownloading = download.isDownloading(song.id);
+
+              return Row(
+                children: [
+                  // Download button
+                  IconButton(
+                    onPressed: () async {
+                      if (isDownloaded) {
+                         // Mostrar confirmación de borrado opcional? Por ahora no.
+                         ScaffoldMessenger.of(context).showSnackBar(
+                           const SnackBar(content: Text('Canción descargada')),
+                         );
+                      } else if (isDownloading) {
+                        download.cancelDownload(song.id);
+                      } else {
+                        HapticFeedback.lightImpact();
+                        // Trigger fetch of stream URL first if not present
+                        final streamUrl = player.handler.currentSong?.streamUrl;
+                        if (streamUrl != null) {
+                           download.downloadSong(song, streamUrl);
+                        } else {
+                           // Try to resolve it? Usually currentSong has it if playing
+                           ScaffoldMessenger.of(context).showSnackBar(
+                             const SnackBar(content: Text('No se puede descargar ahora.')),
+                           );
+                        }
+                      }
+                    },
+                    icon: isDownloading
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              value: progress,
+                              strokeWidth: 2,
+                              color: player.dominantColor,
+                            ),
+                          )
+                        : Icon(
+                            isDownloaded
+                                ? Icons.download_done_rounded
+                                : Icons.download_rounded,
+                            color: isDownloaded ? player.dominantColor : Colors.white60,
+                          ),
+                    iconSize: 26,
+                  ),
+
+                  // Like button
+                  IconButton(
+                    onPressed: () => library.toggleLike(song),
+                    icon: Icon(
+                      isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                      color: isLiked ? player.dominantColor : Colors.white60,
+                    ),
+                    iconSize: 26,
+                  ),
+                ],
               );
             },
           ),
@@ -323,10 +457,10 @@ class _PlayerPageState extends State<PlayerPage>
           // Glow progress slider
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              activeTrackColor: _dominantColor,
-              inactiveTrackColor: Colors.white.withValues(alpha: 0.12),
+              activeTrackColor: player.dominantColor,
+              inactiveTrackColor: Colors.white.withOpacity(0.12),
               thumbColor: Colors.white,
-              overlayColor: _dominantColor.withOpacity(0.2),
+              overlayColor: player.dominantColor.withOpacity(0.2),
               trackHeight: 4,
               thumbShape:
                   const RoundSliderThumbShape(enabledThumbRadius: 7),
@@ -391,7 +525,7 @@ class _PlayerPageState extends State<PlayerPage>
             icon: Icon(
               Icons.shuffle_rounded,
               color:
-                  player.isShuffle ? scheme.primary : Colors.white38,
+                  player.isShuffle ? player.dominantColor : Colors.white38,
               size: 22,
             ),
           ),
@@ -407,7 +541,7 @@ class _PlayerPageState extends State<PlayerPage>
           ),
 
           // Play/Pause
-          _LargePlayButton(player: player, dominantColor: _dominantColor),
+          _LargePlayButton(player: player, dominantColor: player.dominantColor),
 
           // Next
           IconButton(
@@ -430,7 +564,7 @@ class _PlayerPageState extends State<PlayerPage>
                   ? Icons.repeat_one_rounded
                   : Icons.repeat_rounded,
               color: player.repeatMode != pp.RepeatMode.off
-                  ? scheme.primary
+                  ? player.dominantColor
                   : Colors.white38,
               size: 22,
             ),
@@ -491,7 +625,12 @@ class _LargePlayButton extends StatelessWidget {
           .animate(target: player.isPlaying ? 1 : 0)
           .scale(begin: const Offset(1, 1), end: const Offset(0.92, 0.92))
           .then()
-          .scale(begin: const Offset(0.92, 0.92), end: const Offset(1, 1)),
+          .scale(begin: const Offset(0.92, 0.92), end: const Offset(1, 1))
+          .animate(onPlay: (c) => c.repeat())
+          .shimmer(
+            duration: 2.seconds,
+            color: Colors.white.withOpacity(0.2),
+          ),
     );
   }
 }

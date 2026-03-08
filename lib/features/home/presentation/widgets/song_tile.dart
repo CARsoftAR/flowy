@@ -8,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../domain/entities/entities.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../library/presentation/providers/download_provider.dart';
+import '../../../library/presentation/providers/library_provider.dart';
 import '../../../../domain/repositories/repositories.dart';
 import '../../../../core/di/injection.dart';
 
@@ -95,6 +96,37 @@ class SongTile extends StatelessWidget {
                         child: Icon(Icons.equalizer_rounded,
                             color: scheme.primary, size: 24),
                       ),
+                    
+                    // Progress bar for long tracks (like audiobooks)
+                    Consumer<LibraryProvider>(
+                      builder: (context, library, _) {
+                        final progress = library.getBookmarkProgress(song.id, song.duration);
+                        if (progress <= 0 || isCurrentSong) return const SizedBox.shrink();
+                        
+                        return Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            height: 3,
+                            decoration: BoxDecoration(
+                              color: Colors.black45,
+                              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(10)),
+                            ),
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: progress,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: scheme.primary,
+                                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                    ),
                   ],
                 ),
               ),
@@ -211,11 +243,50 @@ class SongTile extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       trailingIcon,
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.more_vert_rounded,
-                        size: 20,
-                        color: scheme.onSurface.withOpacity(0.3),
+                      const SizedBox(width: 4),
+                      PopupMenuButton<String>(
+                        icon: Icon(
+                          Icons.more_vert_rounded,
+                          size: 20,
+                          color: scheme.onSurface.withOpacity(0.3),
+                        ),
+                        offset: const Offset(0, 40),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        color: Color.lerp(scheme.surface, Colors.black, 0.8),
+                        onSelected: (value) async {
+                          if (value == 'like') {
+                            context.read<LibraryProvider>().toggleLike(song);
+                          } else if (value == 'playlist') {
+                            _showAddToPlaylistDialog(context, song);
+                          }
+                        },
+                        itemBuilder: (context) {
+                          final library = context.read<LibraryProvider>();
+                          final isLiked = library.isLiked(song.id);
+                          return [
+                            PopupMenuItem(
+                              value: 'like',
+                              child: Row(
+                                children: [
+                                  Icon(isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded, 
+                                      color: isLiked ? Colors.pink : scheme.primary, size: 20),
+                                  const SizedBox(width: 12),
+                                  Text(isLiked ? 'Quitar de favoritos' : 'Añadir a favoritos'),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'playlist',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.playlist_add_rounded, color: scheme.primary, size: 20),
+                                  const SizedBox(width: 12),
+                                  const Text('Añadir a playlist'),
+                                ],
+                              ),
+                            ),
+                          ];
+                        },
                       ),
                     ],
                   );
@@ -229,5 +300,99 @@ class SongTile extends StatelessWidget {
         .animate(delay: Duration(milliseconds: index * 50))
         .fadeIn(duration: AppConstants.animationNormal)
         .slideX(begin: 0.04, end: 0);
+  }
+
+  void _showAddToPlaylistDialog(BuildContext context, SongEntity song) {
+    final library = context.read<LibraryProvider>();
+    final playlists = library.playlists;
+    final scheme = Theme.of(context).colorScheme;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Color.lerp(scheme.surface, Colors.black, 0.9),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border.all(color: Colors.white12, width: 1),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: Text(
+                'Añadir a playlist',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+            const Divider(color: Colors.white10),
+            if (playlists.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(32),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(Icons.playlist_add_rounded, size: 48, color: Colors.white24),
+                      const SizedBox(height: 12),
+                      const Text('No tienes playlists creadas', style: TextStyle(color: Colors.white54)),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: playlists.length,
+                  itemBuilder: (context, index) {
+                    final p = playlists[index];
+                    final hasSong = p.tracks.any((s) => s.id == song.id);
+
+                    return ListTile(
+                      leading: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.white.withOpacity(0.05),
+                        ),
+                        child: p.thumbnailUrl != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: CachedNetworkImage(imageUrl: p.thumbnailUrl!, fit: BoxFit.cover),
+                              )
+                            : const Icon(Icons.playlist_play_rounded),
+                      ),
+                      title: Text(p.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text('${p.tracks.length} canciones', style: const TextStyle(fontSize: 12)),
+                      trailing: hasSong 
+                          ? Icon(Icons.check_circle_rounded, color: scheme.primary)
+                          : null,
+                      onTap: () {
+                        if (!hasSong) {
+                          library.addSongToPlaylist(p.id, song);
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Añadido a ${p.title}'),
+                              behavior: SnackBarBehavior.floating,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      },
+                    );
+                  },
+                ),
+              ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
   }
 }

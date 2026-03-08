@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
@@ -21,8 +22,57 @@ class LibraryPage extends StatefulWidget {
 }
 
 class _LibraryPageState extends State<LibraryPage> {
-  // 0: Playlists, 1: Liked Songs, 2: Recently Played
+  // 0: Playlists, 1: Liked Songs, 2: Recently Played, 3: Downloads, 4: Playlist Detail
   int _viewIndex = 0;
+  String? _selectedPlaylistId;
+
+  Future<void> _showCreatePlaylistDialog(BuildContext context) async {
+    final controller = TextEditingController();
+    final scheme = Theme.of(context).colorScheme;
+
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color.lerp(scheme.surface, Colors.black, 0.7),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Nueva Playlist', style: TextStyle(fontWeight: FontWeight.w800)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: 'Nombre de la playlist',
+            filled: true,
+            fillColor: Colors.white.withOpacity(0.05),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancelar', style: TextStyle(color: scheme.primary.withValues(alpha: 0.7))),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isNotEmpty) {
+                context.read<LibraryProvider>().createPlaylist(name);
+                Navigator.pop(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: scheme.primary,
+              foregroundColor: scheme.onPrimary,
+              shape: const StadiumBorder(),
+            ),
+            child: const Text('Crear'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +88,15 @@ class _LibraryPageState extends State<LibraryPage> {
             slivers: [
               SliverAppBar(
                 title: Text(
-                  _viewIndex == 0 ? 'Tu Biblioteca' : (_viewIndex == 1 ? 'Me gusta' : (_viewIndex == 2 ? 'Recientes' : 'Descargas')),
+                  _viewIndex == 0 
+                    ? 'Tu Biblioteca' 
+                    : (_viewIndex == 1 
+                        ? 'Me gusta' 
+                        : (_viewIndex == 2 
+                            ? 'Recientes' 
+                            : (_viewIndex == 3 
+                                ? 'Descargas' 
+                                : (library.playlists.firstWhere((p) => p.id == _selectedPlaylistId, orElse: () => const PlaylistEntity(id: '', title: 'Playlist')).title)))),
                   style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 floating: true,
@@ -46,7 +104,7 @@ class _LibraryPageState extends State<LibraryPage> {
                 actions: [
                   if (_viewIndex == 0)
                     IconButton(
-                      onPressed: () {},
+                      onPressed: () => _showCreatePlaylistDialog(context),
                       icon: const Icon(Icons.add_rounded),
                       tooltip: 'Nueva playlist',
                     ),
@@ -69,7 +127,10 @@ class _LibraryPageState extends State<LibraryPage> {
                         label: 'Me gusta',
                         color: const Color(0xFFFF4081),
                         isSelected: _viewIndex == 1,
-                        onTap: () => setState(() => _viewIndex = _viewIndex == 1 ? 0 : 1),
+                        onTap: () => setState(() {
+                          _viewIndex = _viewIndex == 1 ? 0 : 1;
+                          _selectedPlaylistId = null;
+                        }),
                       ),
                       const SizedBox(width: 10),
                       _QuickActionChip(
@@ -77,7 +138,10 @@ class _LibraryPageState extends State<LibraryPage> {
                         label: 'Recientes',
                         color: const Color(0xFF7C4DFF),
                         isSelected: _viewIndex == 2,
-                        onTap: () => setState(() => _viewIndex = _viewIndex == 2 ? 0 : 2),
+                        onTap: () => setState(() {
+                          _viewIndex = _viewIndex == 2 ? 0 : 2;
+                          _selectedPlaylistId = null;
+                        }),
                       ),
                       const SizedBox(width: 10),
                       _QuickActionChip(
@@ -85,7 +149,10 @@ class _LibraryPageState extends State<LibraryPage> {
                         label: 'Descargas',
                         color: scheme.primary,
                         isSelected: _viewIndex == 3,
-                        onTap: () => setState(() => _viewIndex = _viewIndex == 3 ? 0 : 3),
+                        onTap: () => setState(() {
+                          _viewIndex = _viewIndex == 3 ? 0 : 3;
+                          _selectedPlaylistId = null;
+                        }),
                       ),
                     ],
                   ),
@@ -98,18 +165,22 @@ class _LibraryPageState extends State<LibraryPage> {
                   child: SectionHeader(title: 'Tus Playlists'),
                 ),
 
-              // ── Empty playlists state ────────────────────────────────────────
+              // ── Playlists Grid ───────────────────────────────────────────────
               if (_viewIndex == 0)
-                _buildEmptyPlaylists(theme, scheme),
+                library.playlists.isEmpty 
+                  ? _buildEmptyPlaylists(theme, scheme)
+                  : _buildPlaylistsGrid(library.playlists, theme, scheme),
 
-              // ── Liked Songs / Recently Played / Downloads List ───────────────────────────
+              // ── Library Content ─────────────────────────────────────────────
               if (_viewIndex != 0)
                 _buildLibraryList(
                   _viewIndex == 1 
                     ? library.likedSongs 
                     : (_viewIndex == 2 
                         ? library.recentlyPlayed 
-                        : context.watch<DownloadProvider>().downloadedSongs)
+                        : (_viewIndex == 3 
+                            ? context.watch<DownloadProvider>().downloadedSongs
+                            : (library.playlists.firstWhere((p) => p.id == _selectedPlaylistId, orElse: () => const PlaylistEntity(id: '', title: '')).tracks)))
                 ),
 
               const SliverToBoxAdapter(child: SizedBox(height: 120)),
@@ -117,6 +188,35 @@ class _LibraryPageState extends State<LibraryPage> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPlaylistsGrid(List<PlaylistEntity> playlists, ThemeData theme, ColorScheme scheme) {
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: 0.85,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final playlist = playlists[index];
+            return _PlaylistCard(
+              playlist: playlist,
+              onTap: () {
+                setState(() {
+                  _selectedPlaylistId = playlist.id;
+                  _viewIndex = 4;
+                });
+              },
+            );
+          },
+          childCount: playlists.length,
+        ),
+      ),
     );
   }
 
@@ -164,7 +264,7 @@ class _LibraryPageState extends State<LibraryPage> {
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
-                onPressed: () {},
+                onPressed: () => _showCreatePlaylistDialog(context),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Crear playlist'),
                 style: ElevatedButton.styleFrom(
@@ -216,6 +316,107 @@ class _LibraryPageState extends State<LibraryPage> {
           );
         },
         childCount: songs.length,
+      ),
+    );
+  }
+}
+
+class _PlaylistCard extends StatelessWidget {
+  final PlaylistEntity playlist;
+  final VoidCallback onTap;
+
+  const _PlaylistCard({required this.playlist, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: () {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: Color.lerp(scheme.surface, Colors.black, 0.8),
+            title: Text('Eliminar Playlist'),
+            content: Text('¿Estás seguro que deseas eliminar "${playlist.title}"?'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar')),
+              ElevatedButton(
+                onPressed: () {
+                  context.read<LibraryProvider>().deletePlaylist(playlist.id);
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                child: Text('Eliminar'),
+              ),
+            ],
+          ),
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: scheme.surfaceContainerHighest.withOpacity(0.3),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (playlist.thumbnailUrl != null)
+                    CachedNetworkImage(
+                      imageUrl: playlist.thumbnailUrl!,
+                      fit: BoxFit.cover,
+                    )
+                  else
+                    Center(
+                      child: Icon(
+                        Icons.music_note_rounded,
+                        size: 48,
+                        color: scheme.primary.withOpacity(0.5),
+                      ),
+                    ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      color: Colors.black38,
+                      child: Text(
+                        '${playlist.tracks.length} canciones',
+                        style: const TextStyle(color: Colors.white70, fontSize: 10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            playlist.title,
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            'Playlist • Flowy',
+            style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurface.withOpacity(0.5)),
+          ),
+        ],
       ),
     );
   }

@@ -181,7 +181,7 @@ class _MiniPlayerContent extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        boxShadow: FlowyTheme.glowShadow(scheme.primary, intensity: 0.3),
+        boxShadow: FlowyTheme.glowShadow(player.dominantColor, intensity: 0.3),
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
@@ -203,7 +203,7 @@ class _MiniPlayerContent extends StatelessWidget {
               decoration: FlowyTheme.glassDecoration(
                 borderRadius: 18,
                 opacity: 0.25,
-                tintColor: scheme.primary,
+                tintColor: player.dominantColor,
               ),
             ),
           ),
@@ -299,8 +299,8 @@ class _MiniPlayerContent extends StatelessWidget {
             right: 0,
             child: LinearProgressIndicator(
               value: player.progress,
-              backgroundColor: Colors.white12,
-              valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+              backgroundColor: Colors.white10,
+              valueColor: AlwaysStoppedAnimation<Color>(player.dominantColor),
               minHeight: 2,
             ),
           ),
@@ -325,10 +325,10 @@ class _PlayPauseButton extends StatelessWidget {
         player.togglePlayPause();
       },
       child: Container(
-        width: 40,
-        height: 40,
+        width: 38,
+        height: 38,
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary,
+          color: player.dominantColor,
           shape: BoxShape.circle,
         ),
         child: player.isLoading
@@ -344,7 +344,9 @@ class _PlayPauseButton extends StatelessWidget {
                 player.isPlaying
                     ? Icons.pause_rounded
                     : Icons.play_arrow_rounded,
-                color: Colors.white,
+                color: ThemeData.estimateBrightnessForColor(player.dominantColor) == Brightness.light
+                    ? Colors.black87
+                    : Colors.white,
                 size: 22,
               ),
       ),

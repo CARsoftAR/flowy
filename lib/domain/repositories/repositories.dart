@@ -30,6 +30,9 @@ abstract class MusicRepository {
 
   /// Fetch chart playlists (Global Top, Country, etc.)
   FutureEither<List<PlaylistEntity>> getCharts();
+
+  /// NEW: Fetch full video details including description (for chapters).
+  FutureEither<Map<String, dynamic>> getVideoDetails(String videoId);
 }
 
 abstract class LocalLibraryRepository {
@@ -59,4 +62,8 @@ abstract class LocalLibraryRepository {
 
   /// Returns all user-created playlists.
   Future<List<PlaylistEntity>> getUserPlaylists();
+
+  /// NEW: Manage playback bookmarks (Listening Memory)
+  Future<void> saveBookmark(String songId, int seconds);
+  Future<int?> getBookmark(String songId);
 }

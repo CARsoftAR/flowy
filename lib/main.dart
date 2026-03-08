@@ -24,6 +24,8 @@ import 'features/search/presentation/pages/search_page.dart';
 import 'features/search/presentation/providers/search_history_provider.dart';
 import 'features/splash/presentation/pages/splash_page.dart';
 import 'core/theme/ambient_background.dart';
+import 'core/widgets/loading_overlay.dart';
+import 'domain/entities/entities.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // main.dart — App entry point
@@ -242,8 +244,15 @@ class _FlowyShellState extends State<FlowyShell> {
     
     player.addListener(() {
       // If the player status changed or a custom event happened, refresh library
-      // This is a simple way to keep them in sync
       library.refreshData();
+
+      // Handle Resume Request
+      if (player.resumeRequest != null && mounted) {
+        final request = player.resumeRequest!;
+        player.clearResumeRequest(); // Clear so it doesn't show again
+        
+        _showResumeDialog(context, player, request);
+      }
     });
 
     return Consumer<PlayerProvider>(
@@ -268,6 +277,10 @@ class _FlowyShellState extends State<FlowyShell> {
                   right: 0,
                   child: const MiniPlayer(),
                 ),
+
+                // ── Loading Overlay ──────────────────────────────────────────────
+                if (player.isLoading)
+                  const AudioLoadingOverlay(),
               ],
             ),
           ),
@@ -296,6 +309,41 @@ class _FlowyShellState extends State<FlowyShell> {
           ),
         );
       },
+    );
+  }
+
+  void _showResumeDialog(BuildContext context, PlayerProvider player, Map<String, dynamic> request) {
+    final seconds = request['seconds'] as int;
+    final mins = seconds ~/ 60;
+    final secs = (seconds % 60).toString().padLeft(2, '0');
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161625),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Continuar escuchando', style: TextStyle(fontWeight: FontWeight.w900)),
+        content: Text('Hemos guardado tu progreso en "${request['title']}". ¿Quieres retomarlo desde el minuto $mins:$secs?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Desde el inicio', style: TextStyle(color: Colors.white38)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              player.seekTo(Duration(seconds: seconds));
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF7C4DFF),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
     );
   }
 }

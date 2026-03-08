@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:logger/logger.dart';
@@ -12,22 +14,7 @@ import '../../domain/repositories/repositories.dart';
 import 'package:rxdart/rxdart.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FlowyAudioHandler — v4 (Fix "Bad state: addStream + pipe conflict")
-//
-// CAUSA DEL NUEVO CRASH:
-//   Al crear un AudioPlayer fresco y llamar _attachListeners() de nuevo,
-//   el código anterior hacía .pipe(playbackState). playbackState es un
-//   BehaviorSubject. Dart no permite dos addStream() simultáneos sobre el
-//   mismo StreamController → "Bad state: You cannot add items while items
-//   are being added from addStream".
-//
-// FIX:
-//  • Se reemplaza .pipe() por .listen() manual que llama playbackState.add().
-//  • Se mantiene una lista de StreamSubscriptions activas que se cancela
-//    ANTES de crear el nuevo player → nunca hay listeners duplicados.
-//  • El AudioPlayer se reutiliza entre pistas (NO se crea uno nuevo por pista).
-//    setAudioSource() ya reemplaza internamente el source sin necesitar stop().
-//  • "Generation token" para cancelar cargas obsoletas sin tocar el player.
+// FlowyAudioHandler — v5 (Architected for Stability & Long-form content)
 // ─────────────────────────────────────────────────────────────────────────────
 
 typedef OnPlayerError = void Function(String message);
@@ -36,17 +23,12 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   final MusicRepository _musicRepo;
   final Logger _log;
 
-  /// Callback que la UI registra para mostrar mensajes de error amistosos
   OnPlayerError? onError;
 
   List<SongEntity> _queue = [];
   int _currentIndex = 0;
-
-  // Generation token — cada nueva carga incrementa este valor.
-  // Una carga compara su token al final para saber si fue superseded.
   int _loadGeneration = 0;
 
-  // Dual players for crossfading
   late final AudioPlayer _player1;
   late final AudioPlayer _player2;
   bool _usePlayer1 = true;
@@ -54,18 +36,12 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   AudioPlayer get _activePlayer => _usePlayer1 ? _player1 : _player2;
   AudioPlayer get _inactivePlayer => _usePlayer1 ? _player2 : _player1;
 
-  // Equalizer (Applied to both players)
   AndroidEqualizer? _equalizer1;
   AndroidEqualizer? _equalizer2;
 
-  // Subscripciones activas
   final List<StreamSubscription> _subs = [];
-
-  // Cache de URLs resueltas
   final Map<String, String> _urlCache = {};
   final SharedPreferences _prefs;
-
-
 
   FlowyAudioHandler({
     required MusicRepository musicRepository,
@@ -97,11 +73,9 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   );
 
   double _crossfadeDuration = 0.0;
-
   void setCrossfade(double seconds) => _crossfadeDuration = seconds;
 
   void _attachListeners() {
-    // Listen to both players but primary drives the state
     _listenToPlayer(_player1);
     _listenToPlayer(_player2);
   }
@@ -119,20 +93,24 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
 
     _subs.add(player.processingStateStream.listen((state) {
       if (player == _activePlayer && state == ProcessingState.completed) {
-        _log.d('[AudioHandler] Playback completed on active player');
+        _log.d('[AudioHandler] Playback completed. Advancing.');
         unawaited(_advanceToNext());
       }
     }));
 
-    // Crossfade trigger
     _subs.add(player.positionStream.listen((pos) {
+      final songId = currentSong?.id;
+      // Precision saving for long tracks: Every 5 seconds
+      if (songId != null && pos.inSeconds > 5 && pos.inSeconds % 5 == 0) {
+        _prefs.setInt('bookmark_$songId', pos.inSeconds);
+      }
+      
       if (player == _activePlayer && _crossfadeDuration > 0) {
         final remaining = (player.duration ?? Duration.zero) - pos;
         if (remaining.inMilliseconds > 0 && 
             remaining.inMilliseconds <= (_crossfadeDuration * 1000) &&
             _currentIndex < _queue.length - 1 &&
             player.playing) {
-          // Trigger crossfade once
           _checkAndTriggerCrossfade(player);
         }
       }
@@ -143,31 +121,16 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   void _checkAndTriggerCrossfade(AudioPlayer sourcePlayer) {
     if (_isCrossfading) return;
     _isCrossfading = true;
-    _log.i('[AudioHandler] 🔀 Initiating crossfade to next song');
     unawaited(_crossfadeToNext());
   }
 
   Future<void> _crossfadeToNext() async {
     final oldPlayer = _activePlayer;
     final nextIdx = _currentIndex + 1;
-    
-    // Switch active player early so UI reflects next song
     _usePlayer1 = !_usePlayer1;
     _currentIndex = nextIdx;
-    
-    final newPlayer = _activePlayer;
-    
-    // Start loading next on new player
     await _loadAndPlay(_currentIndex, crossfadeFrom: oldPlayer);
     _isCrossfading = false;
-  }
-
-  void _cancelListeners() {
-    for (final sub in _subs) {
-      sub.cancel();
-    }
-    _subs.clear();
-    _log.d('[AudioHandler] Subscripciones canceladas');
   }
 
   void reorderQueue(int oldIndex, int newIndex) {
@@ -175,7 +138,6 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     final item = _queue.removeAt(oldIndex);
     _queue.insert(newIndex, item);
 
-    // Update currentIndex if needed
     if (oldIndex == _currentIndex) {
       _currentIndex = newIndex;
     } else if (oldIndex < _currentIndex && newIndex >= _currentIndex) {
@@ -183,18 +145,14 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     } else if (oldIndex > _currentIndex && newIndex <= _currentIndex) {
       _currentIndex += 1;
     }
-
     _updateQueueMetadata();
   }
 
   Future<void> _advanceToNext() async {
-    // No avanzar si la cola fue limpiada (p.ej. después de stop())
     if (_queue.isEmpty) return;
     if (_currentIndex < _queue.length - 1) {
       _currentIndex++;
       await _loadAndPlay(_currentIndex);
-    } else {
-      _log.d('[AudioHandler] Fin de cola');
     }
   }
 
@@ -212,9 +170,7 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
 
     return PlaybackState(
       controls: [
-        isLiked 
-          ? _favoriteOn.copyWith(label: 'Quitar de favoritos') 
-          : _favoriteOff.copyWith(label: 'Me gusta'),
+        isLiked ? _favoriteOn : _favoriteOff,
         MediaControl.skipToPrevious,
         if (playing) MediaControl.pause else MediaControl.play,
         MediaControl.skipToNext,
@@ -241,19 +197,15 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     );
   }
 
-  // ── API pública ────────────────────────────────────────────────────────────
+  // ── API ────────────────────────────────────────────────────────────────────
 
   Future<void> playSong(SongEntity song, {List<SongEntity>? playQueue}) async {
     _queue = playQueue ?? [song];
     final idx = _queue.indexWhere((s) => s.id == song.id);
     _currentIndex = idx < 0 ? 0 : idx;
-
     _updateQueueMetadata();
     await _loadAndPlay(_currentIndex);
-    _preloadUpcoming();
   }
-
-  // ── BaseAudioHandler overrides ─────────────────────────────────────────────
 
   @override
   Future<void> play() async => _activePlayer.play();
@@ -265,15 +217,9 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   Future<void> stop() async {
     _loadGeneration++;
     _queue = [];
-    _currentIndex = 0;
     try {
-      await Future.wait([
-        _player1.stop(),
-        _player2.stop(),
-      ]);
-    } catch (e) {
-      _log.w('[AudioHandler] stop() error: $e');
-    }
+      await Future.wait([_player1.stop(), _player2.stop()]);
+    } catch (_) {}
     await super.stop();
   }
 
@@ -283,7 +229,8 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   @override
   Future<void> skipToNext() async {
     if (_currentIndex < _queue.length - 1) {
-      await skipToQueueItem(_currentIndex + 1);
+      _currentIndex++;
+      await _loadAndPlay(_currentIndex);
     }
   }
 
@@ -292,7 +239,8 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     if (_activePlayer.position.inSeconds > 3) {
       await seek(Duration.zero);
     } else if (_currentIndex > 0) {
-      await skipToQueueItem(_currentIndex - 1);
+      _currentIndex--;
+      await _loadAndPlay(_currentIndex);
     }
   }
 
@@ -318,9 +266,15 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     await super.setRepeatMode(repeatMode);
   }
 
+  Future<void> setSpeed(double speed) async {
+    await Future.wait([
+      _player1.setSpeed(speed),
+      _player2.setSpeed(speed),
+    ]);
+  }
+
   @override
   Future<void> setRating(Rating rating, [Map<String, dynamic>? extras]) async {
-    _log.i('[AudioHandler] setRating called from notification');
     final song = currentSong;
     if (song == null) return;
 
@@ -335,63 +289,53 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
 
     if (index >= 0) {
       likedSongsJson.removeAt(index);
-      _log.d('[AudioHandler] Removing from favorites: ${song.title}');
     } else {
       likedSongsJson.insert(0, jsonEncode(SongModel.fromEntity(song).toJson()));
-      _log.d('[AudioHandler] Adding to favorites: ${song.title}');
     }
 
     await _prefs.setStringList('liked_songs', likedSongsJson);
-    
-    // 1. Notify the app UI via custom event
     customEvent.add({'type': 'favorite_toggled', 'songId': song.id, 'isLiked': index < 0});
-    _log.d('[AudioHandler] Custom event emitted');
-    
-    // 2. Refresh notification metadata and state
     _updateCurrentMediaItem(song);
     playbackState.add(_buildPlaybackState(_activePlayer.playbackEvent, _activePlayer));
   }
 
-  // ── Carga principal ────────────────────────────────────────────────────────
+  // ── Core Loading ──────────────────────────────────────────────────────────
 
   Future<void> _loadAndPlay(int index, {AudioPlayer? crossfadeFrom}) async {
     final myGeneration = ++_loadGeneration;
     final song = _queue[index];
 
-    _log.i('[AudioHandler] Carga #$myGeneration › "${song.title}" (id=${song.id})');
+    _log.i('[AudioEngine] Loading gen #$myGeneration › "${song.title}"');
+    
+    // Mandatory reset/stop for the player we are about to use
+    final player = _activePlayer;
+    await player.stop(); // Ensura it's clean
+
     _updateCurrentMediaItem(song);
 
-    final player = _activePlayer;
-
-    // Fading out old player if crossfading
-    if (crossfadeFrom != null && _crossfadeDuration > 0) {
-      _log.d('[AudioHandler] Fading out old player...');
+    if (crossfadeFrom != null) {
       _fadeVolume(crossfadeFrom, 1.0, 0.0, _crossfadeDuration);
     } else {
-      // Normal transition: stop other player
       _inactivePlayer.stop();
     }
 
-    // ── Paso 2: Resolver URL (Local o Stream) ───────────────────────────
+    // Resolve URL
     String? streamUrl;
     try {
-      // Check for local file first
       final dir = await getApplicationDocumentsDirectory();
       final localFile = File('${dir.path}/downloads/${song.id}.mp3');
       
       if (await localFile.exists()) {
-        _log.i('[AudioHandler] Reproduciendo archivo local para "${song.title}"');
         streamUrl = localFile.uri.toString();
       } else if (_urlCache.containsKey(song.id)) {
         streamUrl = _urlCache[song.id]!;
       } else {
-        _log.d('[AudioHandler] Solicitando URL a YouTube…');
         final result = await _musicRepo.getStreamUrl(song.id).timeout(const Duration(seconds: 15));
         streamUrl = result.getOrElse(() => throw Exception('URL failed'));
         _urlCache[song.id] = streamUrl;
       }
     } catch (e) {
-      _log.e('[AudioHandler] Error resolviendo URL: $e');
+      _log.e('[AudioEngine] URL Resolution Error: $e');
       _tryNext(myGeneration, index);
       return;
     }
@@ -399,35 +343,52 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     if (myGeneration != _loadGeneration) return;
 
     try {
-      // If crossfading, start new player at 0 volume
-      if (crossfadeFrom != null) {
-        player.setVolume(0.0);
-      } else {
-        player.setVolume(1.0);
-      }
+      player.setVolume(crossfadeFrom != null ? 0.0 : 1.0);
 
+      // Advanced User-Agent and headers to prevent 403 or throttling
       await player.setAudioSource(
-        AudioSource.uri(Uri.parse(streamUrl), tag: _buildMediaItem(song)),
+        AudioSource.uri(
+          Uri.parse(streamUrl), 
+          tag: _buildMediaItem(song),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
+            'Referer': 'https://music.youtube.com/',
+            'Origin': 'https://music.youtube.com/',
+          },
+        ),
         preload: true,
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (myGeneration != _loadGeneration) return;
 
-      unawaited(player.play());
+      // Handle Bookmark Resume Prompt
+      final savedSeconds = _prefs.getInt('bookmark_${song.id}');
+      if (savedSeconds != null && savedSeconds > 10) {
+        customEvent.add({
+          'type': 'request_resume',
+          'songId': song.id,
+          'seconds': savedSeconds,
+          'title': song.title
+        });
+      }
 
-      // Fade in new player
-      if (crossfadeFrom != null && _crossfadeDuration > 0) {
-        _log.d('[AudioHandler] Fading in new player...');
+      await player.play();
+
+      if (crossfadeFrom != null) {
         _fadeVolume(player, 0.0, 1.0, _crossfadeDuration);
       }
     } catch (e) {
-      _log.e('[AudioHandler] Load error: $e');
+      _log.e('[AudioEngine] Player Error: $e');
       _tryNext(myGeneration, index);
     }
   }
 
   void _fadeVolume(AudioPlayer player, double from, double to, double durationSec) {
-    const steps = 20;
+    if (durationSec <= 0) {
+      player.setVolume(to);
+      return;
+    }
+    const steps = 10;
     final interval = (durationSec * 1000) / steps;
     final stepSize = (to - from) / steps;
     double currentVolume = from;
@@ -444,24 +405,16 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     });
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
   void _tryNext(int generation, int failedIndex) {
     if (generation != _loadGeneration) return;
     if (failedIndex < _queue.length - 1) {
-      _log.d('[AudioHandler] Saltando al siguiente tras error');
-      Future.delayed(const Duration(milliseconds: 800), () {
+      Future.delayed(const Duration(milliseconds: 1000), () {
         if (generation == _loadGeneration) {
           _currentIndex = failedIndex + 1;
           unawaited(_loadAndPlay(_currentIndex));
         }
       });
     }
-  }
-
-  void _notifyError(String message) {
-    _log.w('[AudioHandler] Error UI: $message');
-    onError?.call(message);
   }
 
   void _updateCurrentMediaItem(SongEntity song) {
@@ -494,75 +447,34 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     queue.add(_queue.map(_buildMediaItem).toList());
   }
 
-  void _preloadUpcoming() {
-    for (int i = 1; i <= 2; i++) {
-      final idx = _currentIndex + i;
-      if (idx < _queue.length) {
-        final nextSong = _queue[idx];
-        if (!_urlCache.containsKey(nextSong.id)) {
-          _log.d('[AudioHandler] Pre-cargando URL para "${nextSong.title}"');
-          _musicRepo.getStreamUrl(nextSong.id).then((result) {
-            result.fold(
-              (f) => _log.w('[AudioHandler] Pre-carga falló "${nextSong.title}": ${f.message}'),
-              (url) {
-                _urlCache[nextSong.id] = url;
-                _log.d('[AudioHandler] Pre-caché OK: "${nextSong.title}"');
-              },
-            );
-          });
-        }
-      }
-    }
-  }
-
-  // ── Equalizer API ──────────────────────────────────────────────────────────
+  // ── Equalizer ──────────────────────────────────────────────────────────────
   
   Future<List<AndroidEqualizerBand>> getEqualizerBands() async {
-    // Both equalizers have same bands
     return (await _equalizer1?.parameters)?.bands ?? [];
   }
 
   Future<void> setEqualizerBandGain(int bandIndex, double gain) async {
-    // We call setBandGain on both players. 
-    // If the method is not found by analyzer, we use dynamic to bypass strict check but it should exist on Android.
     try {
-      if (_equalizer1 != null) {
-        (_equalizer1 as dynamic).setBandGain(bandIndex, gain);
-      }
-      if (_equalizer2 != null) {
-        (_equalizer2 as dynamic).setBandGain(bandIndex, gain);
-      }
-    } catch (e) {
-      _log.e('[AudioHandler] Error setting EQ gain: $e');
-    }
+      if (_equalizer1 != null) (_equalizer1 as dynamic).setBandGain(bandIndex, gain);
+      if (_equalizer2 != null) (_equalizer2 as dynamic).setBandGain(bandIndex, gain);
+    } catch (_) {}
   }
 
   Future<void> setEqualizerEnabled(bool enabled) async {
-    await Future.wait([
-      _equalizer1!.setEnabled(enabled),
-      _equalizer2!.setEnabled(enabled),
-    ]);
+    await Future.wait([_equalizer1!.setEnabled(enabled), _equalizer2!.setEnabled(enabled)]);
   }
-
-  // ── Streams públicos ──────────────────────────────────────────────────────
 
   Stream<Duration> get positionStream => _activePlayer.positionStream;
   Stream<Duration> get bufferedPositionStream => _activePlayer.bufferedPositionStream;
   Stream<bool> get playingStream => _activePlayer.playingStream;
-  Stream<double> get volumeStream => _activePlayer.volumeStream;
   Duration get position => _activePlayer.position;
-  bool get isPlaying => _activePlayer.playing;
-  SongEntity? get currentSong =>
-      _queue.isNotEmpty && _currentIndex < _queue.length ? _queue[_currentIndex] : null;
+  SongEntity? get currentSong => _queue.isNotEmpty && _currentIndex < _queue.length ? _queue[_currentIndex] : null;
   List<SongEntity> get currentQueue => List.unmodifiable(_queue);
   int get currentQueueIndex => _currentIndex;
 
   Future<void> dispose() async {
     _loadGeneration++;
-    _cancelListeners();
-    await Future.wait([
-      _player1.dispose(),
-      _player2.dispose(),
-    ]);
+    for (final sub in _subs) { sub.cancel(); }
+    await Future.wait([_player1.dispose(), _player2.dispose()]);
   }
 }

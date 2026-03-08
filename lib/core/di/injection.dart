@@ -42,6 +42,9 @@ Future<void> configureDependencies({
 
   // ── Provider ──────────────────────────────────────────────────────────────
   sl.registerLazySingleton<PlayerProvider>(
-    () => PlayerProvider(handler: sl<FlowyAudioHandler>()),
+    () => PlayerProvider(
+      handler: sl<FlowyAudioHandler>(),
+      musicRepository: sl<MusicRepository>(),
+    ),
   );
 }

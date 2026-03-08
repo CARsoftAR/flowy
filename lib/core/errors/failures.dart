@@ -43,6 +43,10 @@ class UnknownFailure extends Failure {
   List<Object?> get props => [message, original];
 }
 
+class DatabaseFailure extends Failure {
+  const DatabaseFailure([super.message = 'Database error']);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // UseCase base class — enforces a clean, testable interface contract
 // ─────────────────────────────────────────────────────────────────────────────

@@ -176,3 +176,13 @@ class LyricsEntity extends Equatable {
   @override
   List<Object?> get props => [songId, lines, isSynced];
 }
+
+class ChapterEntity extends Equatable {
+  final Duration startTime;
+  final String title;
+
+  const ChapterEntity({required this.startTime, required this.title});
+
+  @override
+  List<Object?> get props => [startTime, title];
+}
