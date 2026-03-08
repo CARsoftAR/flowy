@@ -1,7 +1,7 @@
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'TitiSonics';
+  static const String appName = 'Flowy';
   static const String appVersion = '1.0.0';
 
   // Cache

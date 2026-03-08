@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:ui';
-import 'dart:io';
 import 'package:flowy/core/constants/app_constants.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class SplashPage extends StatefulWidget {
   final VoidCallback onFinish;
@@ -13,7 +13,7 @@ class SplashPage extends StatefulWidget {
   State<SplashPage> createState() => _SplashPageState();
 }
 
-class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateMixin {
+class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
@@ -21,7 +21,7 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
   }
 
   void _startTransition() async {
-    await Future.delayed(const Duration(milliseconds: 3000));
+    await Future.delayed(const Duration(milliseconds: 3500));
     if (mounted) {
       widget.onFinish();
     }
@@ -33,183 +33,198 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D14),
+      backgroundColor: Colors.black,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          // Background Gradient Glow
-          Positioned(
-            top: -100,
-            right: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFFFF4081).withOpacity(0.15),
-              ),
-            ).animate(onPlay: (c) => c.repeat()).scale(
-                  begin: const Offset(1, 1),
-                  end: const Offset(1.5, 1.5),
-                  duration: 4.seconds,
-                  curve: Curves.easeInOut,
-                ).then().scale(
-                  begin: const Offset(1.5, 1.5),
-                  end: const Offset(1, 1),
-                  duration: 4.seconds,
-                  curve: Curves.easeInOut,
-                ),
+          // ── Animated Ambient Background ─────────────────────────────────────
+          _AmbientBlob(
+            color: const Color(0xFFB71C1C).withOpacity(0.4),
+            size: size.width * 1.2,
+            offset: const Offset(-0.5, -0.3),
+            duration: 8.seconds,
           ),
-          Positioned(
-            bottom: -50,
-            left: -50,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF7C4DFF).withOpacity(0.15),
-              ),
-            ).animate(onPlay: (c) => c.repeat()).scale(
-                  begin: const Offset(1, 1),
-                  end: const Offset(1.3, 1.3),
-                  duration: 3.seconds,
-                  curve: Curves.easeInOut,
-                ).then().scale(
-                  begin: const Offset(1.3, 1.3),
-                  end: const Offset(1, 1),
-                  duration: 3.seconds,
-                  curve: Curves.easeInOut,
-                ),
+          _AmbientBlob(
+            color: const Color(0xFF311B92).withOpacity(0.3),
+            size: size.width * 1.0,
+            offset: const Offset(0.6, 0.4),
+            duration: 10.seconds,
+          ),
+          _AmbientBlob(
+            color: const Color(0xFFD32F2F).withOpacity(0.2),
+            size: size.width * 0.8,
+            offset: const Offset(-0.2, 0.6),
+            duration: 7.seconds,
+          ),
+          
+          // Blur layer to create the liquid mesh effect
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+            child: Container(color: Colors.transparent),
           ),
 
-          // Main Content
+          // Noise texture overlay
+          Opacity(
+            opacity: 0.04,
+            child: Image.network(
+              'https://grainy-gradients.vercel.app/noise.svg',
+              fit: BoxFit.cover,
+            ),
+          ),
+
+          // ── Center Content ──────────────────────────────────────────────────
           Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo Container with Glassmorphism
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(30),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.1),
-                          width: 1.5,
+                // Animated Abstract Logo
+                Container(
+                  width: 140,
+                  height: 140,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Outer glow
+                      Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.redAccent.withOpacity(0.5),
+                              blurRadius: 50,
+                              spreadRadius: 10,
+                            ),
+                          ],
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Icon(
-                            Icons.music_note_rounded,
-                            size: 80,
-                            color: Colors.white.withOpacity(0.9),
-                          ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds, color: const Color(0xFFFF4081).withOpacity(0.4)),
-                          
-                          // Pulsing Rings
-                          Container(
-                            width: 100,
-                            height: 100,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white10, width: 1),
-                            ),
-                          ).animate(onPlay: (c) => c.repeat()).scale(
-                                begin: const Offset(1, 1),
-                                end: const Offset(1.5, 1.5),
-                                duration: 2.seconds,
-                              ).fadeOut(),
+                      ).animate(onPlay: (c) => c.repeat(reverse: true))
+                        .scale(begin: const Offset(0.8, 0.8), end: const Offset(1.2, 1.2), duration: 2.seconds),
 
-                           Container(
-                            width: 100,
-                            height: 100,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white10, width: 1),
-                            ),
-                          ).animate(onPlay: (c) => c.repeat()).scale(
-                                begin: const Offset(1, 1),
-                                end: const Offset(1.8, 1.8),
-                                delay: 500.ms,
-                                duration: 2.seconds,
-                              ).fadeOut(),
-                        ],
-                      ),
-                    ),
-                  ),
-                ).animate()
-                  .scale(duration: 800.ms, curve: Curves.easeOutBack)
-                  .shimmer(delay: 1.seconds, duration: 1500.ms, color: Colors.white24),
-
-                const SizedBox(height: 32),
-
-                // App Name with Premium Typography
-                Text(
-                   AppConstants.appName,
-                  style: theme.textTheme.displaySmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 4,
-                    color: Colors.white,
-                    shadows: [
-                      Shadow(
-                        color: const Color(0xFFFF4081).withOpacity(0.5),
-                        blurRadius: 15,
-                        offset: const Offset(0, 0),
+                      // Logo Icon
+                      ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          colors: [Colors.white, Color(0xFFFF5252)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ).createShader(bounds),
+                        child: const Icon(
+                          Icons.waves_rounded,
+                          size: 100,
+                          color: Colors.white,
+                        ),
                       ),
                     ],
                   ),
                 ).animate()
-                  .fadeIn(delay: 400.ms, duration: 800.ms)
-                  .slideY(begin: 0.3, end: 0, curve: Curves.easeOutQuad),
+                  .scale(duration: 1500.ms, curve: Curves.easeOutQuart)
+                  .fadeIn(duration: 1.seconds),
+
+                const SizedBox(height: 24),
+
+                // App Name "FLOWY"
+                Text(
+                  'FLOWY',
+                  style: GoogleFonts.outfit(
+                    textStyle: const TextStyle(
+                      fontSize: 54,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 16,
+                      color: Colors.white,
+                    ),
+                  ),
+                ).animate()
+                  .fadeIn(delay: 500.ms, duration: 1.seconds)
+                  .slideY(begin: 0.1, end: 0, duration: 800.ms, curve: Curves.easeOutQuart),
 
                 const SizedBox(height: 8),
 
-                // Tagline
+                // Premium Tagline
                 Text(
-                  'SIENTE EL SONIDO',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: Colors.white38,
-                    letterSpacing: 8,
-                    fontWeight: FontWeight.w300,
+                  'PURE AUDIO BLISS',
+                  style: GoogleFonts.lexend(
+                    textStyle: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.white30,
+                      letterSpacing: 8,
+                      fontWeight: FontWeight.w300,
+                    ),
                   ),
                 ).animate()
-                  .fadeIn(delay: 800.ms, duration: 1000.ms),
+                  .fadeIn(delay: 1200.ms, duration: 1.seconds),
               ],
             ),
           ),
 
-          // Loading indicator at bottom
+          // ── Bottom Loading Indicator ───────────────────────────────────────
           Positioned(
             bottom: 60,
             left: 0,
             right: 0,
             child: Center(
-              child: SizedBox(
-                width: 40,
-                height: 2,
-                child: LinearProgressIndicator(
-                  backgroundColor: Colors.white10,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    const Color(0xFFFF4081).withOpacity(0.8),
-                  ),
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 160,
+                    height: 2,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(1),
+                      child: LinearProgressIndicator(
+                        backgroundColor: Colors.white.withOpacity(0.05),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.redAccent),
+                      ),
+                    ),
+                  ).animate()
+                    .fadeIn(delay: 1500.ms)
+                    .scaleX(begin: 0, end: 1, duration: 1800.ms),
+                  const SizedBox(height: 12),
+                  Text(
+                    'INITIALIZING FLOWY ENGINE',
+                    style: GoogleFonts.inter(
+                      fontSize: 8,
+                      color: Colors.white10,
+                      letterSpacing: 2,
+                    ),
+                  ).animate().fadeIn(delay: 1800.ms),
+                ],
               ),
-            ).animate().fadeIn(delay: 1200.ms),
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AmbientBlob extends StatelessWidget {
+  final Color color;
+  final double size;
+  final Offset offset;
+  final Duration duration;
+
+  const _AmbientBlob({
+    required this.color,
+    required this.size,
+    required this.offset,
+    required this.duration,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: MediaQuery.of(context).size.width * (0.5 + offset.dx) - size / 2,
+      top: MediaQuery.of(context).size.height * (0.5 + offset.dy) - size / 2,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color,
+        ),
+      ).animate(onPlay: (c) => c.repeat(reverse: true))
+        .move(begin: const Offset(-20, -30), end: const Offset(30, 20), duration: duration, curve: Curves.easeInOut)
+        .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.1, 1.1), duration: duration, curve: Curves.easeInOut),
     );
   }
 }

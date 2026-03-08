@@ -73,7 +73,7 @@ Future<void> _init() async {
     ),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.flowy.audio.channel',
-      androidNotificationChannelName: 'TitiSonics Music',
+      androidNotificationChannelName: 'Flowy Music',
       androidNotificationOngoing: false,
       androidStopForegroundOnPause: false,
       notificationColor: Color(0xFF7C4DFF),
@@ -105,7 +105,7 @@ Future<void> _init() async {
           create: (_) => SleepTimerProvider(sl<FlowyAudioHandler>()),
         ),
       ],
-      child: const TitiSonicsApp(),
+      child: const FlowyApp(),
     ),
   );
 }
@@ -135,7 +135,7 @@ class _ErrorApp extends StatelessWidget {
                     size: 64, color: Color(0xFFFF5C7C)),
                 const SizedBox(height: 16),
                 const Text(
-                  'TitiSonics',
+                  'Flowy',
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w700,
@@ -173,14 +173,14 @@ class _ErrorApp extends StatelessWidget {
 // FlowyApp — Root widget with DynamicColorBuilder
 // ─────────────────────────────────────────────────────────────────────────────
 
-class TitiSonicsApp extends StatefulWidget {
-  const TitiSonicsApp({super.key});
+class FlowyApp extends StatefulWidget {
+  const FlowyApp({super.key});
 
   @override
-  State<TitiSonicsApp> createState() => _TitiSonicsAppState();
+  State<FlowyApp> createState() => _FlowyAppState();
 }
 
-class _TitiSonicsAppState extends State<TitiSonicsApp> {
+class _FlowyAppState extends State<FlowyApp> {
   bool _showSplash = true;
 
   @override
