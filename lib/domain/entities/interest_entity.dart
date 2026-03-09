@@ -53,7 +53,7 @@ class CategoryData {
       icon: Icons.fireplace_rounded,
       gradientColors: [Color(0xFFFF8008), Color(0xFFFFC837)],
       category: AudioCategory.music,
-      searchQuerySuffix: 'reggaeton mix 2024',
+      searchQuerySuffix: 'reggaeton mix 2026',
     ),
     InterestEntity(
       id: 'lofi',

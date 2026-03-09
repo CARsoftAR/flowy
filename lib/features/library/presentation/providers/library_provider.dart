@@ -200,8 +200,8 @@ class LibraryProvider with ChangeNotifier {
       return energyKeywords.any((k) => text.contains(k));
     }).toList();
     
-    if (matches.length < 5) return (allSongs..shuffle()).take(10).toList();
-    return (matches..shuffle()).take(15).toList();
+    if (matches.length < 5) return (allSongs..shuffle()).take(50).toList();
+    return (matches..shuffle()).take(50).toList();
   }
 
   List<SongEntity> getChillMix() {
@@ -213,7 +213,7 @@ class LibraryProvider with ChangeNotifier {
       return chillKeywords.any((k) => text.contains(k));
     }).toList();
     
-    if (matches.length < 5) return (allSongs..shuffle()).take(10).toList();
-    return (matches..shuffle()).take(15).toList();
+    if (matches.length < 5) return (allSongs..shuffle()).take(50).toList();
+    return (matches..shuffle()).take(50).toList();
   }
 }

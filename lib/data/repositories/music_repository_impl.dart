@@ -43,8 +43,12 @@ class MusicRepositoryImpl implements MusicRepository {
   @override
   FutureEither<SearchResultEntity> search(String query) async {
     try {
-      final results = await _yt.search.search(query).timeout(const Duration(seconds: 10));
-      final songs = results
+      final initialResults = await _yt.search.search(query).timeout(const Duration(seconds: 10));
+      
+      // Fetch up to 100 items (approx 5 pages) to satisfy "maximum possible" request
+      final allVideos = await _fetchExtended(initialResults, 100);
+      
+      final songs = allVideos
           .map((v) => v.toSongEntity())
           .where((s) => _isValidVideoId(s.id)) // ENFORCE VALID IDS
           .toList();
@@ -208,10 +212,13 @@ class MusicRepositoryImpl implements MusicRepository {
   FutureEither<List<SongEntity>> getRecommendations() async {
     try {
       // Buscar música tendencia global como proxy para recomendaciones
-      final results = await _yt.search
-          .search('top hits 2024 music', filter: TypeFilters.video);
-      final songs = results
-          .take(20)
+      final initialResults = await _yt.search
+          .search('las mejores canciones pop 2026', filter: TypeFilters.video);
+      
+      // Fetch at least 60 items for home screen
+      final allVideos = await _fetchExtended(initialResults, 60);
+
+      final songs = allVideos
           .map((v) => v.toSongEntity())
           .where((s) => _isValidVideoId(s.id)) // ENFORCE VALID IDS
           .toList();
@@ -219,6 +226,28 @@ class MusicRepositoryImpl implements MusicRepository {
     } catch (e) {
       return Left(YoutubeFailure('Could not load recommendations'));
     }
+  }
+
+  /// Helper to fetch multiple pages from a SearchList until reaching target count
+  Future<List<Video>> _fetchExtended(dynamic initial, int target) async {
+    if (initial == null) return [];
+    
+    final List<Video> all = List<Video>.from(initial as Iterable);
+    dynamic current = initial;
+    
+    // We limit safety to 6 pages max to avoid excessive API calls
+    for (int page = 1; page < 6 && all.length < target; page++) {
+      try {
+        final next = await current.nextPage().timeout(const Duration(seconds: 5));
+        if (next == null || next.isEmpty) break;
+        
+        all.addAll(List<Video>.from(next as Iterable));
+        current = next;
+      } catch (_) {
+        break; // Stop if page fetch fails or times out
+      }
+    }
+    return all;
   }
 
   // ── Lyrics ────────────────────────────────────────────────────────────────
