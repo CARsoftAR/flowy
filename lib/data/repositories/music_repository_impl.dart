@@ -87,17 +87,14 @@ class MusicRepositoryImpl implements MusicRepository {
       return Left(YoutubeFailure('Invalid video ID format'));
     }
 
-    final cacheKey = isVideo ? '${videoId}_video' : videoId;
-    if (_streamCache.containsKey(cacheKey)) {
-      _log.d('Stream URL from cache for $cacheKey');
-      return Right(_streamCache[cacheKey]!);
-    }
+    // NO cachear URLs de stream: expiranrápidamente (YouTube las firma con timestamp)
+    // La caché guardaba URLs ya throttleadas y las reutilizaba.
 
     // Intentar con múltiples estrategias de extracción
     for (final strategy in _getStrategies(isVideo)) {
       final result = await strategy(videoId);
       if (result != null) {
-        _streamCache[cacheKey] = result;
+        // NO guardar en caché - las URLs expiran y vienen throttleadas
         return Right(result);
       }
     }
@@ -117,8 +114,9 @@ class MusicRepositoryImpl implements MusicRepository {
       ];
     }
     return [
-      _tryAndroidClient, // Más estable para streaming en dispositivos móviles
-      _tryDefaultClient, // Más rápido pero a veces con restricciones de IP/Headers
+      _tryIosClient,      // iOS: URLs sin throttle, más rápidas
+      _tryAndroidClient,  // Android: fallback estándar
+      _tryDefaultClient,  // Web: último recurso
       _tryAnyAudio,
     ];
   }
@@ -148,27 +146,50 @@ class MusicRepositoryImpl implements MusicRepository {
     return null;
   }
 
-  /// Estrategia 1: Cliente Android — genera URLs directamente reproducibles por ExoPlayer
-  Future<String?> _tryAndroidClient(String videoId) async {
+  /// Estrategia 1: Cliente iOS — las URLs generadas con este cliente NO tienen throttle del parámetro 'n'
+  Future<String?> _tryIosClient(String videoId) async {
     try {
-      _log.d('Estrategia 1 (Android client) para $videoId');
-      // Usar YoutubeExplode con HttpClient personalizado que simula Android
+      _log.d('Estrategia iOS para $videoId');
       final manifest = await _yt.videos.streamsClient
-          .getManifest(videoId, ytClients: [YoutubeApiClient.androidVr])
-          .timeout(const Duration(seconds: 12));
+          .getManifest(videoId, ytClients: [YoutubeApiClient.ios])
+          .timeout(const Duration(seconds: 15));
 
       final stream = manifest.audioOnly
               .where((s) => s.container.name == 'm4a')
               .sortByBitrate()
-              .lastOrNull ?? // lastOrNull = Mayor bitrate disponible (Calidad Premium)
+              .lastOrNull ??
           manifest.audioOnly.sortByBitrate().lastOrNull;
 
       if (stream != null) {
-        _log.d('Estrategia 1 OK: ${stream.container.name} ${stream.bitrate}');
+        _log.d('Estrategia iOS OK: ${stream.container.name} ${stream.bitrate}');
         return stream.url.toString();
       }
     } catch (e) {
-      _log.w('Estrategia 1 falló: $e');
+      _log.w('Estrategia iOS falló: $e');
+    }
+    return null;
+  }
+
+  /// Estrategia 2: Cliente Android genérico (sin VR) — evita el throttle del cliente androidVr
+  Future<String?> _tryAndroidClient(String videoId) async {
+    try {
+      _log.d('Estrategia Android para $videoId');
+      final manifest = await _yt.videos.streamsClient
+          .getManifest(videoId, ytClients: [YoutubeApiClient.android])
+          .timeout(const Duration(seconds: 15));
+
+      final stream = manifest.audioOnly
+              .where((s) => s.container.name == 'm4a')
+              .sortByBitrate()
+              .lastOrNull ??
+          manifest.audioOnly.sortByBitrate().lastOrNull;
+
+      if (stream != null) {
+        _log.d('Estrategia Android OK: ${stream.container.name} ${stream.bitrate}');
+        return stream.url.toString();
+      }
+    } catch (e) {
+      _log.w('Estrategia Android falló: $e');
     }
     return null;
   }
