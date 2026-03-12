@@ -240,9 +240,15 @@ class FlowyTheme {
       boxShadow: showShadow
           ? [
               BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                color: Colors.black.withOpacity(0.25),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+              BoxShadow(
+                color: tint.withOpacity(0.05),
+                blurRadius: 1,
+                spreadRadius: -1,
+                offset: const Offset(0, 1),
               ),
             ]
           : null,
@@ -285,6 +291,20 @@ class FlowyTheme {
       ),
     ];
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HapticEngine — Tactile feedback orchestration
+// ─────────────────────────────────────────────────────────────────────────────
+
+class HapticEngine {
+  HapticEngine._();
+
+  static void light() => HapticFeedback.lightImpact();
+  static void medium() => HapticFeedback.mediumImpact();
+  static void heavy() => HapticFeedback.heavyImpact();
+  static void selection() => HapticFeedback.selectionClick();
+  static void success() => HapticFeedback.vibrate(); // Fallback for success
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -4,6 +4,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../../../domain/entities/entities.dart';
 import '../../../../data/datasources/lyrics_datasource.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/skeleton_shimmer.dart';
 
 class LyricsView extends StatefulWidget {
   final SongEntity song;
@@ -85,6 +87,7 @@ class _LyricsViewState extends State<LyricsView> {
     if (idx != _currentLineIndex) {
       _currentLineIndex = idx;
       _scrollToCurrentLine();
+      HapticEngine.selection(); // Subtle feedback when lyric changes
     }
   }
 
@@ -92,16 +95,29 @@ class _LyricsViewState extends State<LyricsView> {
     if (!_itemScrollController.isAttached) return;
     _itemScrollController.scrollTo(
       index: _currentLineIndex,
-      duration: const Duration(milliseconds: 600),
-      curve: Curves.easeOutCubic,
-      alignment: 0.35, // Position active line slightly above center
+      duration: const Duration(milliseconds: 800),
+      curve: Curves.fastLinearToSlowEaseIn,
+      alignment: 0.3, 
     );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: List.generate(6, (i) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: SkeletonShimmer.rect(
+              width: 150 + (i % 3) * 100, 
+              height: 32,
+              borderRadius: 16,
+            ),
+          )),
+        ),
+      );
     }
 
     if (_error != null || _lyrics == null) {

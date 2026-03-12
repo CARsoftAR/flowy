@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-enum AudioCategory { music, audiobooks, podcasts }
+enum AudioCategory { music, audiobooks, podcasts, movies }
 
 class InterestEntity {
   final String id;
@@ -298,6 +298,73 @@ class CategoryData {
     ),
   ];
 
+  static const List<InterestEntity> movieInterests = [
+    InterestEntity(
+      id: 'action',
+      title: 'Acción',
+      icon: FontAwesomeIcons.fire,
+      gradientColors: [Color(0xFFe52d27), Color(0xFFb31217)],
+      category: AudioCategory.movies,
+      searchQuerySuffix: 'pelicula completa acción español',
+    ),
+    InterestEntity(
+      id: 'comedy',
+      title: 'Comedia',
+      icon: FontAwesomeIcons.faceGrinBeam,
+      gradientColors: [Color(0xFFf12711), Color(0xFFf5af19)],
+      category: AudioCategory.movies,
+      searchQuerySuffix: 'pelicula completa comedia español',
+    ),
+    InterestEntity(
+      id: 'horror_movies',
+      title: 'Terror',
+      icon: FontAwesomeIcons.skull,
+      gradientColors: [Color(0xFF000000), Color(0xFF434343)],
+      category: AudioCategory.movies,
+      searchQuerySuffix: 'pelicula completa terror español',
+    ),
+    InterestEntity(
+      id: 'sci_fi',
+      title: 'Ciencia Ficción',
+      icon: FontAwesomeIcons.rocket,
+      gradientColors: [Color(0xFF00c6ff), Color(0xFF0072ff)],
+      category: AudioCategory.movies,
+      searchQuerySuffix: 'pelicula completa ciencia ficción español',
+    ),
+    InterestEntity(
+      id: 'documentaries',
+      title: 'Documentales',
+      icon: FontAwesomeIcons.earthAmericas,
+      gradientColors: [Color(0xFF11998e), Color(0xFF38ef7d)],
+      category: AudioCategory.movies,
+      searchQuerySuffix: 'documental completo español',
+    ),
+    InterestEntity(
+      id: 'animation',
+      title: 'Animación',
+      icon: FontAwesomeIcons.palette,
+      gradientColors: [Color(0xFF8e2de2), Color(0xFF4a00e0)],
+      category: AudioCategory.movies,
+      searchQuerySuffix: 'pelicula animación completa español',
+    ),
+    InterestEntity(
+      id: 'drama',
+      title: 'Drama',
+      icon: FontAwesomeIcons.masksTheater,
+      gradientColors: [Color(0xFF3a1c71), Color(0xFFd76d77), Color(0xFFffaf7b)],
+      category: AudioCategory.movies,
+      searchQuerySuffix: 'pelicula completa drama español',
+    ),
+    InterestEntity(
+      id: 'suspense',
+      title: 'Suspenso',
+      icon: FontAwesomeIcons.userSecret,
+      gradientColors: [Color(0xFF2c3e50), Color(0xFF4ca1af)],
+      category: AudioCategory.movies,
+      searchQuerySuffix: 'pelicula completa suspenso español',
+    ),
+  ];
+
   static List<InterestEntity> getInterestsForCategory(AudioCategory category) {
     switch (category) {
       case AudioCategory.music:
@@ -306,6 +373,8 @@ class CategoryData {
         return audiobookInterests;
       case AudioCategory.podcasts:
         return podcastInterests;
+      case AudioCategory.movies:
+        return movieInterests;
     }
   }
 }

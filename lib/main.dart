@@ -4,6 +4,7 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'core/constants/app_constants.dart';
 import 'core/di/injection.dart';
@@ -31,19 +32,32 @@ import 'domain/entities/entities.dart';
 // main.dart — App entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// main.dart — App entry point with improved error handling
+// ─────────────────────────────────────────────────────────────────────────────
+
 Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
   // Capture all Flutter framework errors
   FlutterError.onError = FlutterError.presentError;
 
-  await runZonedGuarded(_init, (error, stack) {
-    // Last-resort: show error screen instead of black screen
-    runApp(_ErrorApp(message: error.toString()));
+  _runAppWithSafety();
+}
+
+void _runAppWithSafety() {
+  runZonedGuarded(() async {
+    await _init();
+  }, (error, stack) {
+    debugPrint('Critical Init Error: $error\n$stack');
+    runApp(_ErrorApp(
+      message: error.toString(),
+      onRetry: () => _runAppWithSafety(),
+    ));
   });
 }
 
 Future<void> _init() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
   // ── System UI ────────────────────────────────────────────────────────────
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -62,23 +76,35 @@ Future<void> _init() async {
   // ── flutter_animate global settings ─────────────────────────────────────
   Animate.restartOnHotReload = true;
 
-  // ── Initialize audio_service ─────────────────────────────────────────────
+  // ── Initialize services ─────────────────────────────────────────────────
   final musicRepo = MusicRepositoryImpl();
-  final prefs = await SharedPreferences.getInstance();
+  
+  // Use try-catch for precise early errors
+  SharedPreferences prefs;
+  try {
+    prefs = await SharedPreferences.getInstance();
+  } catch (e) {
+    throw Exception('Error al acceder al almacenamiento local. Por favor, reinicia la app.');
+  }
 
-  final audioHandler = await AudioService.init<FlowyAudioHandler>(
-    builder: () => FlowyAudioHandler(
-      musicRepository: musicRepo,
-      sharedPreferences: prefs,
-    ),
-    config: const AudioServiceConfig(
-      androidNotificationChannelId: 'com.flowy.audio.channel',
-      androidNotificationChannelName: 'Flowy Music',
-      androidNotificationOngoing: false,
-      androidStopForegroundOnPause: false,
-      notificationColor: Color(0xFF7C4DFF),
-    ),
-  );
+  FlowyAudioHandler audioHandler;
+  try {
+    audioHandler = await AudioService.init<FlowyAudioHandler>(
+      builder: () => FlowyAudioHandler(
+        musicRepository: musicRepo,
+        sharedPreferences: prefs,
+      ),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.flowy.audio.channel',
+        androidNotificationChannelName: 'Flowy Music',
+        androidNotificationOngoing: false,
+        androidStopForegroundOnPause: false,
+        notificationColor: Color(0xFF7C4DFF),
+      ),
+    );
+  } catch (e) {
+    throw Exception('Error al iniciar el motor de audio. Detalles: ${e.toString()}');
+  }
 
   // ── Dependency injection ─────────────────────────────────────────────────
   await configureDependencies(audioHandler: audioHandler);
@@ -116,10 +142,28 @@ Future<void> _init() async {
 
 class _ErrorApp extends StatelessWidget {
   final String message;
-  const _ErrorApp({required this.message});
+  final VoidCallback onRetry;
+
+  const _ErrorApp({
+    required this.message,
+    required this.onRetry,
+  });
+
+  String _getHumanMessage() {
+    if (message.contains('SocketException') || message.contains('Network') || message.contains('connect')) {
+      return 'NO HAY INTERNET';
+    }
+    if (message.contains('Null check operator')) {
+      return 'Error de inicialización (valor nulo).';
+    }
+    return 'Ocurrió un error inesperado al iniciar.';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final humanMessage = _getHumanMessage();
+    final isNoInternet = humanMessage == 'NO HAY INTERNET';
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
@@ -129,36 +173,93 @@ class _ErrorApp extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline_rounded,
-                    size: 64, color: Color(0xFFFF5C7C)),
-                const SizedBox(height: 16),
-                const Text(
+                Icon(
+                  isNoInternet ? Icons.wifi_off_rounded : Icons.error_outline_rounded,
+                  size: 72, 
+                  color: const Color(0xFFFF5C7C)
+                ).animate(onPlay: (c) => c.repeat(reverse: true))
+                 .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.1, 1.1), duration: 1.seconds),
+                
+                const SizedBox(height: 32),
+                
+                Text(
                   'Flowy',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
+                  style: GoogleFonts.outfit(
+                    textStyle: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -1,
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 8),
+                
+                Text(
+                  humanMessage,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 18, 
+                    fontWeight: FontWeight.w600,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Ocurrió un error al iniciar',
-                  style: TextStyle(fontSize: 16, color: Colors.white70),
-                ),
+                
                 const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(8),
+                
+                if (!isNoInternet)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 24),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: SelectableText(
+                      message,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 11, 
+                        color: Colors.white38, 
+                        fontFamily: 'monospace'
+                      ),
+                    ),
                   ),
-                  child: SelectableText(
-                    message,
-                    style: const TextStyle(
-                        fontSize: 11, color: Colors.white54, fontFamily: 'monospace'),
+
+                const SizedBox(height: 8),
+                
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text(
+                      'REINTENTAR',
+                      style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7C4DFF),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
                   ),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                Text(
+                  isNoInternet 
+                    ? 'Verifica tu conexión y vuelve a intentarlo' 
+                    : 'Si el problema persiste, contacta a soporte',
+                  style: const TextStyle(fontSize: 12, color: Colors.white24),
                 ),
               ],
             ),
@@ -286,26 +387,28 @@ class _FlowyShellState extends State<FlowyShell> {
           ),
 
           // ── NavigationBar ───────────────────────────────────────────────────
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home_rounded),
-                label: 'Inicio',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.search_outlined),
-                selectedIcon: Icon(Icons.search_rounded),
-                label: 'Buscar',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.library_music_outlined),
-                selectedIcon: Icon(Icons.library_music_rounded),
-                label: 'Biblioteca',
-              ),
-            ],
+          bottomNavigationBar: SafeArea(
+            child: NavigationBar(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: 'Inicio',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.search_outlined),
+                  selectedIcon: Icon(Icons.search_rounded),
+                  label: 'Buscar',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.library_music_outlined),
+                  selectedIcon: Icon(Icons.library_music_rounded),
+                  label: 'Biblioteca',
+                ),
+              ],
+            ),
           ),
         );
       },

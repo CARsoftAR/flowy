@@ -217,8 +217,8 @@ class SongTile extends StatelessWidget {
                             },
                             (url) async {
                               downloader.setFetching(song.id, false);
-                              final success = await downloader.downloadSong(song, url);
-                              if (context.mounted) {
+                              final success = await downloader.downloadSong(song, url, context: context);
+                              if (context.mounted && success) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(success ? '¡Descargado!' : 'Error al descargar'),

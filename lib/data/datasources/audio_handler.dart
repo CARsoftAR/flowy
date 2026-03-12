@@ -1,13 +1,11 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:logger/logger.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import '../../data/models/song_model.dart';
 import '../../domain/entities/entities.dart';
 import '../../domain/repositories/repositories.dart';
@@ -53,7 +51,6 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
         _log = logger ?? Logger(printer: PrettyPrinter(methodCount: 4)) {
     _equalizer1 = AndroidEqualizer();
     _equalizer2 = AndroidEqualizer();
-    
     _player1 = AudioPlayer(audioPipeline: AudioPipeline(androidAudioEffects: [_equalizer1!]));
     _player2 = AudioPlayer(audioPipeline: AudioPipeline(androidAudioEffects: [_equalizer2!]));
     
@@ -102,7 +99,11 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
       final songId = currentSong?.id;
       // Precision saving for long tracks: Every 5 seconds
       if (songId != null && pos.inSeconds > 5 && pos.inSeconds % 5 == 0) {
-        _prefs.setInt('bookmark_$songId', pos.inSeconds);
+        try {
+          _prefs.setInt('bookmark_$songId', pos.inSeconds);
+        } catch (_) {
+          // Ignorar errores de persistencia en tiempo real para no tumbar la app
+        }
       }
       
       if (player == _activePlayer && _crossfadeDuration > 0) {
@@ -188,7 +189,7 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
         ProcessingState.buffering: AudioProcessingState.buffering,
         ProcessingState.ready: AudioProcessingState.ready,
         ProcessingState.completed: AudioProcessingState.completed,
-      }[player.processingState]!,
+      }[player.processingState] ?? AudioProcessingState.idle,
       playing: playing,
       updatePosition: player.position,
       bufferedPosition: player.bufferedPosition,
@@ -325,12 +326,14 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
       final dir = await getApplicationDocumentsDirectory();
       final localFile = File('${dir.path}/downloads/${song.id}.mp3');
       
+      bool isLocal = false;
       if (await localFile.exists()) {
         streamUrl = localFile.uri.toString();
+        isLocal = true;
       } else if (_urlCache.containsKey(song.id)) {
         streamUrl = _urlCache[song.id]!;
       } else {
-        final result = await _musicRepo.getStreamUrl(song.id).timeout(const Duration(seconds: 15));
+        final result = await _musicRepo.getStreamUrl(song.id, isVideo: song.isVideo).timeout(const Duration(seconds: 15));
         streamUrl = result.getOrElse(() => throw Exception('URL failed'));
         _urlCache[song.id] = streamUrl;
       }
@@ -345,19 +348,22 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     try {
       player.setVolume(crossfadeFrom != null ? 0.0 : 1.0);
 
-      // Advanced User-Agent and headers to prevent 403 or throttling
+      // Solo aplicar headers si es una URL de red (HTTP/HTTPS)
+      // Esto evita errores de PlatformException al intentar leer archivos locales con headers web
+      final isNetwork = streamUrl.startsWith('http');
+      
       await player.setAudioSource(
         AudioSource.uri(
           Uri.parse(streamUrl), 
           tag: _buildMediaItem(song),
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
-            'Referer': 'https://music.youtube.com/',
-            'Origin': 'https://music.youtube.com/',
-          },
+          headers: isNetwork ? {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Referer': 'https://www.youtube.com/',
+            'Origin': 'https://www.youtube.com/',
+          } : null,
         ),
         preload: true,
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 25)); // Aumentado para podcasts pesados
 
       if (myGeneration != _loadGeneration) return;
 
@@ -439,7 +445,10 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
       duration: song.duration,
       rating: Rating.newHeartRating(isLiked),
       artUri: song.bestThumbnail.isNotEmpty ? Uri.tryParse(song.bestThumbnail) : null,
-      extras: const {'source': 'youtube'},
+      extras: {
+        'source': 'youtube',
+        'isVideo': song.isVideo,
+      },
     );
   }
 
@@ -461,7 +470,8 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   }
 
   Future<void> setEqualizerEnabled(bool enabled) async {
-    await Future.wait([_equalizer1!.setEnabled(enabled), _equalizer2!.setEnabled(enabled)]);
+    if (_equalizer1 != null) await _equalizer1!.setEnabled(enabled);
+    if (_equalizer2 != null) await _equalizer2!.setEnabled(enabled);
   }
 
   Stream<Duration> get positionStream => _activePlayer.positionStream;
@@ -471,6 +481,7 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   SongEntity? get currentSong => _queue.isNotEmpty && _currentIndex < _queue.length ? _queue[_currentIndex] : null;
   List<SongEntity> get currentQueue => List.unmodifiable(_queue);
   int get currentQueueIndex => _currentIndex;
+  String? getCachedUrl(String songId) => _urlCache[songId];
 
   Future<void> dispose() async {
     _loadGeneration++;

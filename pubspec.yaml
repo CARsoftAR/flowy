@@ -68,6 +68,8 @@ dependencies:
   font_awesome_flutter: ^10.7.0
   sqflite: ^2.3.3+3
   path: ^1.9.0
+  video_player: ^2.11.1
+  chewie: ^1.13.0
 
 
 dev_dependencies:
@@ -84,10 +86,16 @@ dev_dependencies:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icon.png"
-  adaptive_icon_background: "#000000"
-  adaptive_icon_foreground: "assets/icon_foreground.png"
+  image_path: "assets/logo.png"
+  adaptive_icon_background: "#1C2131"
+  adaptive_icon_foreground: "assets/logo.png"
   min_sdk_android: 21
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/
+    - assets/images/
+    - assets/icons/
+    - assets/animations/
+

@@ -81,22 +81,23 @@ class MusicRepositoryImpl implements MusicRepository {
   // ── Stream URL ────────────────────────────────────────────────────────────
 
   @override
-  FutureEither<String> getStreamUrl(String videoId) async {
+  FutureEither<String> getStreamUrl(String videoId, {bool isVideo = false}) async {
     if (!_isValidVideoId(videoId)) {
       _log.e('Invalid YouTube video ID: $videoId');
       return Left(YoutubeFailure('Invalid video ID format'));
     }
 
-    if (_streamCache.containsKey(videoId)) {
-      _log.d('Stream URL from cache for $videoId');
-      return Right(_streamCache[videoId]!);
+    final cacheKey = isVideo ? '${videoId}_video' : videoId;
+    if (_streamCache.containsKey(cacheKey)) {
+      _log.d('Stream URL from cache for $cacheKey');
+      return Right(_streamCache[cacheKey]!);
     }
 
     // Intentar con múltiples estrategias de extracción
-    for (final strategy in _extractionStrategies) {
+    for (final strategy in _getStrategies(isVideo)) {
       final result = await strategy(videoId);
       if (result != null) {
-        _streamCache[videoId] = result;
+        _streamCache[cacheKey] = result;
         return Right(result);
       }
     }
@@ -107,12 +108,45 @@ class MusicRepositoryImpl implements MusicRepository {
     ));
   }
 
-  /// Lista de estrategias de extracción en orden de preferencia
-  late final List<Future<String?> Function(String)> _extractionStrategies = [
-    _tryAndroidClient,
-    _tryDefaultClient,
-    _tryAnyAudio,
-  ];
+  List<Future<String?> Function(String)> _getStrategies(bool isVideo) {
+    if (isVideo) {
+      return [
+        _tryMuxedVideo,
+        _tryAnyVideo,
+        _tryDefaultClient, // Fallback to audio if video fails
+      ];
+    }
+    return [
+      _tryAndroidClient, // Más estable para streaming en dispositivos móviles
+      _tryDefaultClient, // Más rápido pero a veces con restricciones de IP/Headers
+      _tryAnyAudio,
+    ];
+  }
+
+  Future<String?> _tryMuxedVideo(String videoId) async {
+    try {
+      _log.d('Strategy: Muxed Video for $videoId');
+      final manifest = await _yt.videos.streamsClient.getManifest(videoId);
+      final stream = manifest.muxed.withHighestBitrate();
+      return stream.url.toString();
+    } catch (e) {
+      _log.w('Muxed Video strategy failed: $e');
+    }
+    return null;
+  }
+
+  Future<String?> _tryAnyVideo(String videoId) async {
+    try {
+      _log.d('Strategy: Any Video for $videoId');
+      final manifest = await _yt.videos.streamsClient.getManifest(videoId);
+      if (manifest.muxed.isNotEmpty) {
+        return manifest.muxed.first.url.toString();
+      }
+    } catch (e) {
+      _log.w('Any Video strategy failed: $e');
+    }
+    return null;
+  }
 
   /// Estrategia 1: Cliente Android — genera URLs directamente reproducibles por ExoPlayer
   Future<String?> _tryAndroidClient(String videoId) async {
@@ -126,7 +160,7 @@ class MusicRepositoryImpl implements MusicRepository {
       final stream = manifest.audioOnly
               .where((s) => s.container.name == 'm4a')
               .sortByBitrate()
-              .lastOrNull ?? // lastOrNull = menor bitrate = más estable en móvil
+              .lastOrNull ?? // lastOrNull = Mayor bitrate disponible (Calidad Premium)
           manifest.audioOnly.sortByBitrate().lastOrNull;
 
       if (stream != null) {

@@ -33,25 +33,25 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF1C2131), // Background matching the image
       body: Stack(
         fit: StackFit.expand,
         children: [
           // ── Animated Ambient Background ─────────────────────────────────────
           _AmbientBlob(
-            color: const Color(0xFFB71C1C).withOpacity(0.4),
+            color: const Color(0xFF323F5F).withOpacity(0.4),
             size: size.width * 1.2,
             offset: const Offset(-0.5, -0.3),
             duration: 8.seconds,
           ),
           _AmbientBlob(
-            color: const Color(0xFF311B92).withOpacity(0.3),
+            color: const Color(0xFF1E2638).withOpacity(0.3),
             size: size.width * 1.0,
             offset: const Offset(0.6, 0.4),
             duration: 10.seconds,
           ),
           _AmbientBlob(
-            color: const Color(0xFFD32F2F).withOpacity(0.2),
+            color: const Color(0xFF2D3748).withOpacity(0.2),
             size: size.width * 0.8,
             offset: const Offset(-0.2, 0.6),
             duration: 7.seconds,
@@ -79,20 +79,20 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
               children: [
                 // Animated Abstract Logo
                 Container(
-                  width: 140,
-                  height: 140,
+                  width: 180,
+                  height: 180,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
                       // Outer glow
                       Container(
-                        width: 100,
-                        height: 100,
+                        width: 140,
+                        height: 140,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.redAccent.withOpacity(0.5),
+                              color: const Color(0xFF1C2131).withOpacity(0.5),
                               blurRadius: 50,
                               spreadRadius: 10,
                             ),
@@ -101,17 +101,14 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
                       ).animate(onPlay: (c) => c.repeat(reverse: true))
                         .scale(begin: const Offset(0.8, 0.8), end: const Offset(1.2, 1.2), duration: 2.seconds),
 
-                      // Logo Icon
-                      ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: [Colors.white, Color(0xFFFF5252)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ).createShader(bounds),
-                        child: const Icon(
-                          Icons.waves_rounded,
-                          size: 100,
-                          color: Colors.white,
+                      // Logo Image
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(90),
+                        child: Image.asset(
+                          'assets/logo.png',
+                          width: 140,
+                          height: 140,
+                          fit: BoxFit.cover,
                         ),
                       ),
                     ],
@@ -124,12 +121,12 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 
                 // App Name "FLOWY"
                 Text(
-                  'FLOWY',
+                  'Flowy',
                   style: GoogleFonts.outfit(
                     textStyle: const TextStyle(
-                      fontSize: 54,
+                      fontSize: 52, 
                       fontWeight: FontWeight.w900,
-                      letterSpacing: 16,
+                      letterSpacing: -1,
                       color: Colors.white,
                     ),
                   ),
@@ -172,7 +169,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
                       borderRadius: BorderRadius.circular(1),
                       child: LinearProgressIndicator(
                         backgroundColor: Colors.white.withOpacity(0.05),
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.redAccent),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white24),
                       ),
                     ),
                   ).animate()
@@ -193,6 +190,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
           ),
         ],
       ),
+
     );
   }
 }

@@ -1,0 +1,100 @@
+﻿ackage_info_plus-9.0.0/android/src/main/kotlin/dev/fluttercommu
+nity/plus/packageinfo/PackageInfoPlugin.kt:113:32 Unresolved 
+reference 'isNullOrEmpty'.
+e: file:///C:/Users/Yo/AppData/Local/Pub/Cache/hosted/pub.dev/p
+ackage_info_plus-9.0.0/android/src/main/kotlin/dev/fluttercommu
+nity/plus/packageinfo/PackageInfoPlugin.kt:113:62 Unresolved 
+reference 'first'.
+e: file:///C:/Users/Yo/AppData/Local/Pub/Cache/hosted/pub.dev/p
+ackage_info_plus-9.0.0/android/src/main/kotlin/dev/fluttercommu
+nity/plus/packageinfo/PackageInfoPlugin.kt:116:50 Unresolved 
+reference 'first'.
+e: file:///C:/Users/Yo/AppData/Local/Pub/Cache/hosted/pub.dev/p
+ackage_info_plus-9.0.0/android/src/main/kotlin/dev/fluttercommu
+nity/plus/packageinfo/PackageInfoPlugin.kt:127:6 Class 
+'kotlin.jvm.Throws' was compiled with an incompatible version 
+of Kotlin. The actual metadata version is 2.2.0, but the 
+compiler version 2.0.0 can read versions up to 2.1.0.
+The class is loaded from C:/Users/Yo/.gradle/caches/modules-2/f
+iles-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.2.0/fdfc65fbc42fd
+a253a26f61dac3c0aca335fae96/kotlin-stdlib-2.2.0.jar!/kotlin/jvm
+/Throws.class
+e: file:///C:/Users/Yo/AppData/Local/Pub/Cache/hosted/pub.dev/p
+ackage_info_plus-9.0.0/android/src/main/kotlin/dev/fluttercommu
+nity/plus/packageinfo/PackageInfoPlugin.kt:130:9 Class 
+'kotlin.Unit' was compiled with an incompatible version of 
+Kotlin. The actual metadata version is 2.2.0, but the compiler 
+version 2.0.0 can read versions up to 2.1.0.
+The class is loaded from C:/Users/Yo/.gradle/caches/modules-2/f
+iles-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.2.0/fdfc65fbc42fd
+a253a26f61dac3c0aca335fae96/kotlin-stdlib-2.2.0.jar!/kotlin/Uni
+t.class
+e: file:///C:/Users/Yo/AppData/Local/Pub/Cache/hosted/pub.dev/p
+ackage_info_plus-9.0.0/android/src/main/kotlin/dev/fluttercommu
+nity/plus/packageinfo/PackageInfoPlugin.kt:142:19 For-loop 
+range must have an 'iterator()' method.
+e: file:///C:/Users/Yo/AppData/Local/Pub/Cache/hosted/pub.dev/p
+ackage_info_plus-9.0.0/android/src/main/kotlin/dev/fluttercommu
+nity/plus/packageinfo/PackageInfoPlugin.kt:142:25 Unresolved 
+reference 'indices'.
+e: file:///C:/Users/Yo/AppData/Local/Pub/Cache/hosted/pub.dev/p
+ackage_info_plus-9.0.0/android/src/main/kotlin/dev/fluttercommu
+nity/plus/packageinfo/PackageInfoPlugin.kt:144:13 Class 
+'kotlin.Unit' was compiled with an incompatible version of 
+Kotlin. The actual metadata version is 2.2.0, but the compiler 
+version 2.0.0 can read versions up to 2.1.0.
+The class is loaded from C:/Users/Yo/.gradle/caches/modules-2/f
+iles-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.2.0/fdfc65fbc42fd
+a253a26f61dac3c0aca335fae96/kotlin-stdlib-2.2.0.jar!/kotlin/Uni
+t.class
+e: file:///C:/Users/Yo/AppData/Local/Pub/Cache/hosted/pub.dev/p
+ackage_info_plus-9.0.0/android/src/main/kotlin/dev/fluttercommu
+nity/plus/packageinfo/PackageInfoPlugin.kt:145:13 Class 
+'kotlin.Unit' was compiled with an incompatible version of 
+Kotlin. The actual metadata version is 2.2.0, but the compiler 
+version 2.0.0 can read versions up to 2.1.0.
+The class is loaded from C:/Users/Yo/.gradle/caches/modules-2/f
+iles-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.2.0/fdfc65fbc42fd
+a253a26f61dac3c0aca335fae96/kotlin-stdlib-2.2.0.jar!/kotlin/Uni
+t.class
+e: file:///C:/Users/Yo/AppData/Local/Pub/Cache/hosted/pub.dev/p
+ackage_info_plus-9.0.0/android/src/main/kotlin/dev/fluttercommu
+nity/plus/packageinfo/PackageInfoPlugin.kt:145:22 Argument 
+type mismatch: actual type is 'kotlin.String', but 
+'kotlin.Int' was expected.
+e: file:///C:/Users/Yo/AppData/Local/Pub/Cache/hosted/pub.dev/p
+ackage_info_plus-9.0.0/android/src/main/kotlin/dev/fluttercommu
+nity/plus/packageinfo/PackageInfoPlugin.kt:147:23 Too many 
+arguments for 'public constructor(): kotlin/String'.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task 
+':package_info_plus:compileReleaseKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compi
+lerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerW
+orkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 1m 12s
+Running Gradle task 'assembleRelease'...                           72,7s
+
+ÔöîÔöÇ Flutter Fix ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÉ
+Ôöé [!] Your project requires a newer version of the Kotlin Gradle plugin.                       Ôöé
+Ôöé Find the latest version on https://kotlinlang.org/docs/releases.html#release-details, then   Ôöé
+Ôöé update the                                                                                   Ôöé
+Ôöé version number of the plugin with id "org.jetbrains.kotlin.android" in the plugins block of  Ôöé
+Ôöé C:\Apps\flowy\android\settings.gradle.                                                       Ôöé
+Ôöé                                                                                              Ôöé
+Ôöé Alternatively (if your project was created before Flutter 3.19), update                      Ôöé
+Ôöé C:\Apps\flowy\android\build.gradle.kts                                                       Ôöé
+Ôöé ext.kotlin_version = '<latest-version>'                                                      Ôöé
+ÔööÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÿ
+Gradle task assembleRelease failed with exit code 1

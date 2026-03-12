@@ -16,6 +16,7 @@ class SongEntity extends Equatable {
   final Duration duration;
   final String? streamUrl;
   final bool isLocal;
+  final bool isVideo;
   final Map<String, dynamic>? extras;
 
   const SongEntity({
@@ -29,6 +30,7 @@ class SongEntity extends Equatable {
     this.duration = Duration.zero,
     this.streamUrl,
     this.isLocal = false,
+    this.isVideo = false,
     this.extras,
   });
 
@@ -52,6 +54,7 @@ class SongEntity extends Equatable {
     Duration? duration,
     String? streamUrl,
     bool? isLocal,
+    bool? isVideo,
     Map<String, dynamic>? extras,
   }) {
     return SongEntity(
@@ -65,6 +68,7 @@ class SongEntity extends Equatable {
       duration: duration ?? this.duration,
       streamUrl: streamUrl ?? this.streamUrl,
       isLocal: isLocal ?? this.isLocal,
+      isVideo: isVideo ?? this.isVideo,
       extras: extras ?? this.extras,
     );
   }

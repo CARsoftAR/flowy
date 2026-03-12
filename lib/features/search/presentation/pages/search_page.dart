@@ -96,6 +96,8 @@ class _SearchPageState extends State<SearchPage> {
         finalQuery = '$baseQuery completo audiolibro español';
       } else if (_selectedCategory == AudioCategory.podcasts) {
         finalQuery = '$baseQuery podcast español';
+      } else if (_selectedCategory == AudioCategory.movies) {
+        finalQuery = '$baseQuery pelicula completa español';
       }
     }
 
@@ -123,6 +125,11 @@ class _SearchPageState extends State<SearchPage> {
           // However, some good podcast clips are short, so let's be careful.
           // For now, we'll just sort by duration or rely on YouTube's relevance.
           filtered.sort((a, b) => b.duration.compareTo(a.duration));
+        }
+
+        bool forceVideo = _selectedCategory == AudioCategory.movies || (_activeInterest?.category == AudioCategory.movies);
+        if (forceVideo) {
+          filtered = filtered.map((s) => s.copyWith(isVideo: true)).toList();
         }
 
         setState(() {
@@ -222,11 +229,13 @@ class _SearchPageState extends State<SearchPage> {
             AudioCategory.music => 'Música',
             AudioCategory.audiobooks => 'Audiolibros',
             AudioCategory.podcasts => 'Podcasts',
+            AudioCategory.movies => 'Películas',
           };
           final icon = switch (cat) {
             AudioCategory.music => Icons.music_note_rounded,
             AudioCategory.audiobooks => Icons.menu_book_rounded,
             AudioCategory.podcasts => Icons.podcasts_rounded,
+            AudioCategory.movies => Icons.movie_rounded,
           };
 
           return Padding(

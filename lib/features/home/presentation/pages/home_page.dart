@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../../core/utils/skeleton_widgets.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/skeleton_shimmer.dart';
 import '../../../../domain/entities/entities.dart';
 import '../../../../domain/repositories/repositories.dart';
 import '../../../../core/di/injection.dart';
@@ -79,13 +81,17 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   Text(
                     'Flowy',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      foreground: Paint()
-                        ..shader = LinearGradient(
-                          colors: [scheme.primary, scheme.secondary],
-                        ).createShader(
-                            const Rect.fromLTWH(0, 0, 120, 40)),
+                    style: GoogleFonts.outfit(
+                      textStyle: theme.textTheme.headlineMedium?.copyWith(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                        foreground: Paint()
+                          ..shader = LinearGradient(
+                            colors: [scheme.primary, scheme.secondary],
+                          ).createShader(
+                              const Rect.fromLTWH(0, 0, 150, 40)),
+                      ),
                     ),
                   ),
                 ],
@@ -143,8 +149,31 @@ class _HomePageState extends State<HomePage> {
 
             // ── Song List ────────────────────────────────────────────────
             _loading
-                ? const SliverToBoxAdapter(
-                    child: SongListSkeleton(count: 10),
+                ? SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        children: List.generate(8, (i) => Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Row(
+                            children: [
+                              SkeletonShimmer.rect(width: 56, height: 56, borderRadius: 12),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SkeletonShimmer.rect(width: 180, height: 16),
+                                    const SizedBox(height: 8),
+                                    SkeletonShimmer.rect(width: 100, height: 12),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
+                      ),
+                    ),
                   )
                 : _error != null
                     ? SliverToBoxAdapter(
@@ -161,6 +190,7 @@ class _HomePageState extends State<HomePage> {
                               song: song,
                               index: index,
                               onTap: () {
+                                HapticEngine.light();
                                 final player = context.read<PlayerProvider>();
                                 final library = context.read<LibraryProvider>();
                                 player.playSong(song, queue: _recommendations);

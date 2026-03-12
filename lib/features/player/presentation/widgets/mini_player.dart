@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/premium_transitions.dart';
 import '../../../../domain/entities/entities.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../player/presentation/pages/player_page.dart';
@@ -96,22 +97,7 @@ class _MiniPlayerState extends State<MiniPlayer>
 
   void _openFullPlayer(BuildContext context) {
     Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (_, animation, __) => const PlayerPage(),
-        transitionsBuilder: (_, animation, __, child) {
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 1),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-            )),
-            child: child,
-          );
-        },
-        transitionDuration: AppConstants.animationSlow,
-      ),
+      PremiumTransitions.slideUp(const PlayerPage()),
     );
   }
 
@@ -153,7 +139,7 @@ class _MiniPlayerState extends State<MiniPlayer>
                 }
               },
               onTap: () {
-                HapticFeedback.mediumImpact();
+                HapticEngine.medium();
                 _openFullPlayer(context);
               },
               child: _MiniPlayerContent(song: song, player: player),
@@ -272,7 +258,7 @@ class _MiniPlayerContent extends StatelessWidget {
                     _ControlButton(
                       icon: Icons.skip_previous_rounded,
                       onTap: () {
-                        HapticFeedback.lightImpact();
+                        HapticEngine.light();
                         player.skipToPrevious();
                       },
                     ),
@@ -282,7 +268,7 @@ class _MiniPlayerContent extends StatelessWidget {
                     _ControlButton(
                       icon: Icons.skip_next_rounded,
                       onTap: () {
-                        HapticFeedback.lightImpact();
+                        HapticEngine.light();
                         player.skipToNext();
                       },
                     ),
@@ -321,7 +307,7 @@ class _PlayPauseButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        HapticFeedback.mediumImpact();
+        HapticEngine.medium();
         player.togglePlayPause();
       },
       child: Container(

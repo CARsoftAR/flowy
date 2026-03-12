@@ -59,6 +59,7 @@ class SmartPlaylistsRow extends StatelessWidget {
 
           return GestureDetector(
             onTap: () {
+              HapticEngine.medium();
               if (tracks.isNotEmpty) {
                 final player = context.read<PlayerProvider>();
                 player.playSong(tracks.first, queue: tracks);

@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/video_player_widget.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -86,13 +88,15 @@ class _PlayerPageState extends State<PlayerPage>
               _buildTopBar(context),
               const SizedBox(height: 8),
 
-              // Artwork or Lyrics toggle
+              // Artwork, Lyrics or Video toggle
               Expanded(
                 child: AnimatedSwitcher(
                   duration: AppConstants.animationNormal,
                   child: _showLyrics
                       ? LyricsView(song: song, position: player.position)
-                      : _buildArtworkSection(song, player.dominantColor),
+                      : (song.isVideo 
+                          ? _buildVideoSection(song, player)
+                          : _buildArtworkSection(song, player.dominantColor)),
                 ),
               ),
 
@@ -101,15 +105,19 @@ class _PlayerPageState extends State<PlayerPage>
               const SizedBox(height: 8),
 
               // Audio wave bars
-              AudioWaveBar(
-                isPlaying: player.isPlaying,
-                color: player.dominantColor,
-              ),
-              const SizedBox(height: 8),
+              if (!song.isVideo) ...[
+                AudioWaveBar(
+                  isPlaying: player.isPlaying,
+                  color: player.dominantColor,
+                ),
+                const SizedBox(height: 8),
+              ],
 
               // Progress bar
-              _buildProgressBar(context, player),
-              const SizedBox(height: 16),
+              if (!song.isVideo) ...[
+                _buildProgressBar(context, player),
+                const SizedBox(height: 16),
+              ],
 
               // Controls
               _buildControls(context, player),
@@ -326,15 +334,41 @@ class _PlayerPageState extends State<PlayerPage>
                     ),
                   ),
                   child: const Center(
-                    child: Icon(Icons.music_note, color: Colors.white30,
-                        size: 64),
+                    child: Icon(Icons.music_note, color: Colors.white30, size: 64),
                   ),
                 ),
               ),
             ),
-          )
-              .animate(onPlay: (c) => c.repeat())
-              .shimmer(duration: 3.seconds, color: Colors.white10),
+          ).animate(onPlay: (c) => c.repeat())
+           .shimmer(duration: 3.seconds, color: Colors.white10),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoSection(SongEntity song, pp.PlayerProvider player) {
+    final streamUrl = player.handler.getCachedUrl(song.id);
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: FlowyTheme.glowShadow(player.dominantColor, intensity: 0.3),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: streamUrl != null 
+            ? VideoPlayerWidget(
+                streamUrl: streamUrl,
+                isPlaying: player.isPlaying,
+                position: player.position,
+              )
+            : Container(
+                color: Colors.black,
+                child: const Center(child: CircularProgressIndicator()),
+              ),
         ),
       ),
     );
@@ -401,7 +435,7 @@ class _PlayerPageState extends State<PlayerPage>
                         // Trigger fetch of stream URL first if not present
                         final streamUrl = player.handler.currentSong?.streamUrl;
                         if (streamUrl != null) {
-                           download.downloadSong(song, streamUrl);
+                           download.downloadSong(song, streamUrl, context: context);
                         } else {
                            // Try to resolve it? Usually currentSong has it if playing
                            ScaffoldMessenger.of(context).showSnackBar(
@@ -519,7 +553,7 @@ class _PlayerPageState extends State<PlayerPage>
           // Shuffle
           IconButton(
             onPressed: () {
-              HapticFeedback.lightImpact();
+              HapticEngine.light();
               player.toggleShuffle();
             },
             icon: Icon(
@@ -533,7 +567,7 @@ class _PlayerPageState extends State<PlayerPage>
           // Previous
           IconButton(
             onPressed: () {
-              HapticFeedback.lightImpact();
+              HapticEngine.medium();
               player.skipToPrevious();
             },
             icon: const Icon(Icons.skip_previous_rounded,
@@ -546,7 +580,7 @@ class _PlayerPageState extends State<PlayerPage>
           // Next
           IconButton(
             onPressed: () {
-              HapticFeedback.lightImpact();
+              HapticEngine.medium();
               player.skipToNext();
             },
             icon: const Icon(Icons.skip_next_rounded,
@@ -556,7 +590,7 @@ class _PlayerPageState extends State<PlayerPage>
           // Repeat
           IconButton(
             onPressed: () {
-              HapticFeedback.lightImpact();
+              HapticEngine.light();
               player.cycleRepeatMode();
             },
             icon: Icon(
@@ -594,7 +628,7 @@ class _LargePlayButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        HapticFeedback.mediumImpact();
+        HapticEngine.medium();
         player.togglePlayPause();
       },
       child: AnimatedContainer(
@@ -622,11 +656,13 @@ class _LargePlayButton extends StatelessWidget {
                 size: 38,
               ),
       )
-          .animate(target: player.isPlaying ? 1 : 0)
+          .animate(
+            target: player.isPlaying ? 1 : 0,
+            onPlay: (c) => c.repeat(),
+          )
           .scale(begin: const Offset(1, 1), end: const Offset(0.92, 0.92))
           .then()
           .scale(begin: const Offset(0.92, 0.92), end: const Offset(1, 1))
-          .animate(onPlay: (c) => c.repeat())
           .shimmer(
             duration: 2.seconds,
             color: Colors.white.withOpacity(0.2),

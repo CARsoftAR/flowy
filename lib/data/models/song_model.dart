@@ -76,6 +76,7 @@ class SongModel {
   final String? thumbnailUrl;
   final String? highResThumbnailUrl;
   final Duration duration;
+  final bool isVideo;
 
   SongModel({
     required this.id,
@@ -84,6 +85,7 @@ class SongModel {
     this.thumbnailUrl,
     this.highResThumbnailUrl,
     this.duration = Duration.zero,
+    this.isVideo = false,
   });
 
   factory SongModel.fromJson(Map<String, dynamic> json) {
@@ -94,6 +96,7 @@ class SongModel {
       thumbnailUrl: json['thumbnailUrl'] as String?,
       highResThumbnailUrl: json['highResThumbnailUrl'] as String?,
       duration: Duration(milliseconds: json['durationMs'] as int? ?? 0),
+      isVideo: json['isVideo'] as bool? ?? false,
     );
   }
 
@@ -105,6 +108,7 @@ class SongModel {
       'thumbnailUrl': thumbnailUrl,
       'highResThumbnailUrl': highResThumbnailUrl,
       'durationMs': duration.inMilliseconds,
+      'isVideo': isVideo,
     };
   }
 
@@ -116,6 +120,7 @@ class SongModel {
       thumbnailUrl: entity.thumbnailUrl,
       highResThumbnailUrl: entity.highResThumbnailUrl,
       duration: entity.duration,
+      isVideo: entity.isVideo,
     );
   }
 
@@ -127,6 +132,7 @@ class SongModel {
       thumbnailUrl: thumbnailUrl,
       highResThumbnailUrl: highResThumbnailUrl,
       duration: duration,
+      isVideo: isVideo,
     );
   }
 }

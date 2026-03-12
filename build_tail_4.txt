@@ -1,0 +1,100 @@
+﻿3e25c755128ba9a85b7e0a1/transformed/out/jars/classes.jar!/META-
+INF/package_info_plus_release.kotlin_moduleModule was compiled 
+with an incompatible version of Kotlin. The binary version of 
+its metadata is 2.1.0, expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/modules-2/files-2.1/org.j
+etbrains.kotlin/kotlin-stdlib/2.2.0/fdfc65fbc42fda253a26f61dac3
+c0aca335fae96/kotlin-stdlib-2.2.0.jar!/META-INF/kotlin-stdlib-j
+dk7.kotlin_moduleModule was compiled with an incompatible 
+version of Kotlin. The binary version of its metadata is 
+2.2.0, expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/modules-2/files-2.1/org.j
+etbrains.kotlin/kotlin-stdlib/2.2.0/fdfc65fbc42fda253a26f61dac3
+c0aca335fae96/kotlin-stdlib-2.2.0.jar!/META-INF/kotlin-stdlib.k
+otlin_moduleModule was compiled with an incompatible version 
+of Kotlin. The binary version of its metadata is 2.2.0, 
+expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/modules-2/files-2.1/org.j
+etbrains.kotlin/kotlin-stdlib/2.2.0/fdfc65fbc42fda253a26f61dac3
+c0aca335fae96/kotlin-stdlib-2.2.0.jar!/META-INF/kotlin-stdlib-j
+dk8.kotlin_moduleModule was compiled with an incompatible 
+version of Kotlin. The binary version of its metadata is 
+2.2.0, expected version is 1.9.0.
+e: file:///C:/Apps/flowy/build/wakelock_plus/tmp/kotlin-classes
+/release/META-INF/wakelock_plus_release.kotlin_moduleModule 
+was compiled with an incompatible version of Kotlin. The 
+binary version of its metadata is 2.1.0, expected version is 
+1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/modules-2/files-2.1/org.j
+etbrains.kotlin/kotlin-stdlib/2.1.10/d3028429e7151d7a7c1a0d63a4
+f60eac86a87b91/kotlin-stdlib-2.1.10.jar!/META-INF/kotlin-stdlib
+-jdk7.kotlin_moduleModule was compiled with an incompatible 
+version of Kotlin. The binary version of its metadata is 
+2.1.0, expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/modules-2/files-2.1/org.j
+etbrains.kotlin/kotlin-stdlib/2.1.10/d3028429e7151d7a7c1a0d63a4
+f60eac86a87b91/kotlin-stdlib-2.1.10.jar!/META-INF/kotlin-stdlib
+-jdk8.kotlin_moduleModule was compiled with an incompatible 
+version of Kotlin. The binary version of its metadata is 
+2.1.0, expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/modules-2/files-2.1/org.j
+etbrains.kotlin/kotlin-stdlib/2.1.10/d3028429e7151d7a7c1a0d63a4
+f60eac86a87b91/kotlin-stdlib-2.1.10.jar!/META-INF/kotlin-stdlib
+.kotlin_moduleModule was compiled with an incompatible version 
+of Kotlin. The binary version of its metadata is 2.1.0, 
+expected version is 1.9.0.
+e: file:///C:/Apps/flowy/build/shared_preferences_android/tmp/k
+otlin-classes/release/META-INF/shared_preferences_android_relea
+se.kotlin_moduleModule was compiled with an incompatible 
+version of Kotlin. The binary version of its metadata is 
+2.1.0, expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/8.14/transforms/27fd3752e
+5ba89b7b88b03f41c8f2b7a/transformed/out/jars/classes.jar!/META-
+INF/rive_common_release.kotlin_moduleModule was compiled with 
+an incompatible version of Kotlin. The binary version of its 
+metadata is 2.1.0, expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/8.14/transforms/78a165c22
+c14d7867ff63e3e176fb16b/transformed/out/jars/classes.jar!/META-
+INF/wakelock_plus_release.kotlin_moduleModule was compiled 
+with an incompatible version of Kotlin. The binary version of 
+its metadata is 2.1.0, expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/8.14/transforms/241819026
+e798491eb0d5bbf4270646a/transformed/out/jars/classes.jar!/META-
+INF/shared_preferences_android_release.kotlin_moduleModule was 
+compiled with an incompatible version of Kotlin. The binary 
+version of its metadata is 2.1.0, expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/8.14/transforms/97320727e
+b35ad7e228237e0b59fb8a1/transformed/out/jars/classes.jar!/META-
+INF/video_player_android_release.kotlin_moduleModule was 
+compiled with an incompatible version of Kotlin. The binary 
+version of its metadata is 2.1.0, expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/8.14/transforms/1d3dc2ae2
+9b00e9acf992267956c1e54/transformed/out/jars/classes.jar!/META-
+INF/dynamic_color_release.kotlin_moduleModule was compiled 
+with an incompatible version of Kotlin. The binary version of 
+its metadata is 2.1.0, expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/8.14/transforms/2198cb12c
+3e25c755128ba9a85b7e0a1/transformed/out/jars/classes.jar!/META-
+INF/package_info_plus_release.kotlin_moduleModule was compiled 
+with an incompatible version of Kotlin. The binary version of 
+its metadata is 2.1.0, expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/modules-2/files-2.1/org.j
+etbrains.kotlin/kotlin-stdlib/2.2.0/fdfc65fbc42fda253a26f61dac3
+c0aca335fae96/kotlin-stdlib-2.2.0.jar!/META-INF/kotlin-stdlib-j
+dk7.kotlin_moduleModule was compiled with an incompatible 
+version of Kotlin. The binary version of its metadata is 
+2.2.0, expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/modules-2/files-2.1/org.j
+etbrains.kotlin/kotlin-stdlib/2.2.0/fdfc65fbc42fda253a26f61dac3
+c0aca335fae96/kotlin-stdlib-2.2.0.jar!/META-INF/kotlin-stdlib.k
+otlin_moduleModule was compiled with an incompatible version 
+of Kotlin. The binary version of its metadata is 2.2.0, 
+expected version is 1.9.0.
+e: file:///C:/Users/Yo/.gradle/caches/modules-2/files-2.1/org.j
+etbrains.kotlin/kotlin-stdlib/2.2.0/fdfc65fbc42fda253a26f61dac3
+c0aca335fae96/kotlin-stdlib-2.2.0.jar!/META-INF/kotlin-stdlib-j
+dk8.kotlin_moduleModule was compiled with an incompatible 
+version of Kotlin. The binary version of its metadata is 
+2.2.0, expected version is 1.9.0.
+Running Gradle task 'assembleRelease'...                          254,1s
+ÔêÜ Built build\app\outputs\flutter-apk\app-release.apk (90.5MB)

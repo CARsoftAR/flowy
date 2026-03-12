@@ -104,18 +104,23 @@ class _AudioWaveBarState extends State<AudioWaveBar>
             builder: (_, __) {
               final height = 36 * _animations[i].value;
               return Container(
-                width: 3,
-                height: height.clamp(3.0, 36.0),
+                width: 4,
+                height: height.clamp(4.0, 36.0),
                 margin: const EdgeInsets.symmetric(horizontal: 1.5),
                 decoration: BoxDecoration(
-                  color: widget.color.withOpacity(
-                    0.4 + _animations[i].value * 0.6,
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      widget.color.withOpacity(0.3),
+                      widget.color.withOpacity(0.9),
+                    ],
                   ),
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(3),
                   boxShadow: [
                     BoxShadow(
-                      color: widget.color.withOpacity(0.3),
-                      blurRadius: 4,
+                      color: widget.color.withOpacity(0.25 * _animations[i].value),
+                      blurRadius: 8,
                       spreadRadius: 0,
                     ),
                   ],

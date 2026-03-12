@@ -14,9 +14,9 @@ abstract class MusicRepository {
   /// Fetch autocomplete suggestions for partial [query].
   FutureEither<List<String>> getSearchSuggestions(String query);
 
-  /// Resolve the audio stream URL for [videoId].
+  /// Resolve the stream URL for [videoId].
   /// Attempts mirror fallback if primary extraction fails.
-  FutureEither<String> getStreamUrl(String videoId);
+  FutureEither<String> getStreamUrl(String videoId, {bool isVideo = false});
 
   /// Fetch full playlist details including all tracks.
   FutureEither<PlaylistEntity> getPlaylist(String playlistId);
