@@ -175,7 +175,7 @@ class DownloadProvider extends ChangeNotifier {
     }
   }
 
-  void _showDownloadConfirmDialog({
+  void showDownloadConfirmDialog({
     required BuildContext context,
     required SongEntity song,
     required String streamUrl,

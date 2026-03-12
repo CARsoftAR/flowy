@@ -235,7 +235,7 @@ class SongTile extends StatelessWidget {
                               final size = await downloader.getStreamSize(url);
                               downloader.setFetching(song.id, false);
                               if (context.mounted) {
-                                (downloader as dynamic)._showDownloadConfirmDialog(
+                                downloader.showDownloadConfirmDialog(
                                   context: context,
                                   song: song,
                                   streamUrl: url,
