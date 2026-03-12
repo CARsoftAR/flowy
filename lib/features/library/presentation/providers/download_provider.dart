@@ -239,9 +239,24 @@ class DownloadProvider extends ChangeNotifier {
                   child: const Text('CANCELAR', style: TextStyle(color: Colors.white24, fontWeight: FontWeight.bold)),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.pop(context);
-                    downloadSong(song, streamUrl, context: context);
+                    final success = await downloadSong(song, streamUrl, context: context);
+                    if (success && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: emeraldPrimary,
+                          duration: const Duration(seconds: 3),
+                          content: Row(
+                            children: [
+                              const Icon(Icons.check_circle_rounded, color: Colors.white),
+                              const SizedBox(width: 12),
+                              Expanded(child: Text('✅ "${song.title}" descargado', style: const TextStyle(fontWeight: FontWeight.bold))),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: emeraldPrimary,
@@ -299,14 +314,22 @@ class DownloadProvider extends ChangeNotifier {
         throw Exception('File saved but is empty or missing');
       }
     } catch (e) {
+      final file = File(savePath);
+      if (await file.exists()) await file.delete();
       if (e is DioException && e.type == DioExceptionType.cancel) {
-        debugPrint('[DownloadProvider] Download cancelled: ${song.title}');
-        final file = File(savePath);
-        if (await file.exists()) await file.delete();
+        debugPrint('[DownloadProvider] Descarga cancelada: ${song.title}');
       } else {
-        debugPrint('[DownloadProvider] Error downloading ${song.title}: $e');
-        final file = File(savePath);
-        if (await file.exists()) await file.delete();
+        debugPrint('[DownloadProvider] Error descargando ${song.title}: $e');
+        // Mostrar error al usuario
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al descargar "${song.title}". Intenta de nuevo.'),
+              backgroundColor: Colors.red.shade700,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       }
       return false;
     } finally {

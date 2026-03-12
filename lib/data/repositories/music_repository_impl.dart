@@ -114,9 +114,9 @@ class MusicRepositoryImpl implements MusicRepository {
       ];
     }
     return [
-      _tryIosClient,      // iOS: URLs sin throttle, más rápidas
-      _tryAndroidClient,  // Android: fallback estándar
-      _tryDefaultClient,  // Web: último recurso
+      _tryAndroidClient,  // Android: cliente más compatible, URLs correctas
+      _tryDefaultClient,  // Web: fallback estándar
+      _tryIosClient,      // iOS: último recurso
       _tryAnyAudio,
     ];
   }
