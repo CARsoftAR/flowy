@@ -80,6 +80,7 @@ class DownloadProvider extends ChangeNotifier {
   bool isDownloaded(String id) => _downloadedIds.contains(id);
   bool isDownloading(String id) => _progress.containsKey(id);
   bool isFetching(String id) => _fetchingIds.contains(id);
+  bool get isAnyProcessing => _progress.isNotEmpty || _fetchingIds.isNotEmpty;
 
   void setFetching(String id, bool active) {
     if (active) {

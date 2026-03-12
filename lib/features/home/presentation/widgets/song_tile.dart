@@ -200,9 +200,25 @@ class SongTile extends StatelessWidget {
                       ),
                     );
                   } else {
+                    final isAnyOtherProcessing = downloader.isAnyProcessing;
+                    
                     trailingIcon = IconButton(
-                      icon: const Icon(Icons.download_for_offline_outlined, size: 24),
-                      onPressed: () async {
+                      icon: Icon(
+                        Icons.download_for_offline_outlined, 
+                        size: 24,
+                        color: isAnyOtherProcessing 
+                          ? scheme.onSurface.withOpacity(0.1) 
+                          : scheme.onSurface.withOpacity(0.4),
+                      ),
+                      onPressed: isAnyOtherProcessing ? () {
+                         ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                         ScaffoldMessenger.of(context).showSnackBar(
+                           const SnackBar(
+                             content: Text('⚠️ Ya hay una descarga en curso. Espera a que termine.'),
+                             duration: Duration(seconds: 2),
+                           ),
+                         );
+                      } : () async {
                         HapticFeedback.mediumImpact();
                         downloader.setFetching(song.id, true);
                         try {
@@ -233,7 +249,6 @@ class SongTile extends StatelessWidget {
                           downloader.setFetching(song.id, false);
                         }
                       },
-                      color: scheme.onSurface.withOpacity(0.4),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     );
