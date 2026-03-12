@@ -116,14 +116,17 @@ class _SearchPageState extends State<SearchPage> {
     if (!mounted) return;
 
     result.fold(
-      (failure) => setState(() => _isSearching = false),
+      (failure) {
+        setState(() => _isSearching = false);
+        // Reportar el error a través del PlayerProvider para que se muestre en el snackbar/UI
+        context.read<PlayerProvider>().reportManualError(
+          'Error de búsqueda: ${failure.message}'
+        );
+      },
       (results) {
         // Filter specifically for long-form content if it's Podcasts/Audiobooks
         List<SongEntity> filtered = results.songs;
         if (_selectedCategory != AudioCategory.music) {
-          // Filter out very short songs (e.g. < 5 mins) to prioritize long content
-          // However, some good podcast clips are short, so let's be careful.
-          // For now, we'll just sort by duration or rely on YouTube's relevance.
           filtered.sort((a, b) => b.duration.compareTo(a.duration));
         }
 

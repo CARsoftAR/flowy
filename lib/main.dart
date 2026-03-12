@@ -347,6 +347,24 @@ class _FlowyShellState extends State<FlowyShell> {
       // If the player status changed or a custom event happened, refresh library
       library.refreshData();
 
+      // Show error snackbar if something fails
+      if (player.hasError && player.errorMessage != null && mounted) {
+        final msg = player.errorMessage!;
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: const Color(0xFFB00020),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Cerrar',
+              textColor: Colors.white,
+              onPressed: player.clearError,
+            ),
+          ),
+        );
+      }
+
       // Handle Resume Request
       if (player.resumeRequest != null && mounted) {
         final request = player.resumeRequest!;

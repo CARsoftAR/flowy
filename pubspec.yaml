@@ -16,7 +16,7 @@ dependencies:
   audio_session: 0.1.25
 
   # ─── YouTube Data Extraction ──────────────────────────────────────
-  youtube_explode_dart: ^3.0.1
+  youtube_explode_dart: ^3.0.5
 
   # ─── State Management ─────────────────────────────────────────────
   flutter_bloc: ^8.1.6

@@ -26,6 +26,7 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   List<SongEntity> _queue = [];
   int _currentIndex = 0;
   int _loadGeneration = 0;
+  int _consecutiveFailures = 0;
 
   late final AudioPlayer _player1;
   late final AudioPlayer _player2;
@@ -49,11 +50,8 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   })  : _musicRepo = musicRepository,
         _prefs = sharedPreferences,
         _log = logger ?? Logger(printer: PrettyPrinter(methodCount: 4)) {
-    _equalizer1 = AndroidEqualizer();
-    _equalizer2 = AndroidEqualizer();
-    _player1 = AudioPlayer(audioPipeline: AudioPipeline(androidAudioEffects: [_equalizer1!]));
-    _player2 = AudioPlayer(audioPipeline: AudioPipeline(androidAudioEffects: [_equalizer2!]));
-    
+    _player1 = AudioPlayer();
+    _player2 = AudioPlayer();
     _attachListeners();
   }
 
@@ -78,22 +76,35 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
   }
 
   void _listenToPlayer(AudioPlayer player) {
-    _subs.add(player.playbackEventStream.listen((event) {
-      if (player == _activePlayer) {
-        try {
-          playbackState.add(_buildPlaybackState(event, player));
-        } catch (e) {
-          _log.w('[AudioHandler] playbackState.add error: $e');
+    _subs.add(player.playbackEventStream.listen(
+      (event) {
+        if (player == _activePlayer) {
+          try {
+            playbackState.add(_buildPlaybackState(event, player));
+          } catch (e) {
+            _log.w('[AudioHandler] playbackState.add error: $e');
+          }
         }
-      }
-    }));
+      },
+      onError: (Object e, StackTrace st) {
+        _log.e('[AudioHandler] PlaybackEventStream Error', error: e, stackTrace: st);
+        if (player == _activePlayer) {
+          onError?.call('Error de fuente de audio: $e');
+        }
+      },
+    ));
 
-    _subs.add(player.processingStateStream.listen((state) {
-      if (player == _activePlayer && state == ProcessingState.completed) {
-        _log.d('[AudioHandler] Playback completed. Advancing.');
-        unawaited(_advanceToNext());
-      }
-    }));
+    _subs.add(player.processingStateStream.listen(
+      (state) {
+        if (player == _activePlayer && state == ProcessingState.completed) {
+          _log.d('[AudioHandler] Playback completed. Advancing.');
+          unawaited(_advanceToNext());
+        }
+      },
+      onError: (Object e, StackTrace st) {
+        _log.e('[AudioHandler] ProcessingStateStream Error', error: e, stackTrace: st);
+      },
+    ));
 
     _subs.add(player.positionStream.listen((pos) {
       final songId = currentSong?.id;
@@ -330,16 +341,25 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
       if (await localFile.exists()) {
         streamUrl = localFile.uri.toString();
         isLocal = true;
-      } else if (_urlCache.containsKey(song.id)) {
-        streamUrl = _urlCache[song.id]!;
       } else {
         final result = await _musicRepo.getStreamUrl(song.id, isVideo: song.isVideo).timeout(const Duration(seconds: 15));
         streamUrl = result.getOrElse(() => throw Exception('URL failed'));
-        _urlCache[song.id] = streamUrl;
       }
     } catch (e) {
       _log.e('[AudioEngine] URL Resolution Error: $e');
-      _tryNext(myGeneration, index);
+      _consecutiveFailures++;
+      
+      final isLast = index >= _queue.length - 1;
+      if (isLast || _consecutiveFailures >= 3) {
+        final reason = _consecutiveFailures >= 3 
+            ? 'No se pudieron obtener URLs de stream. YouTube puede estar bloqueando la petición.' 
+            : 'No se pudo obtener la URL de reproducción.';
+        onError?.call(reason);
+        _consecutiveFailures = 0;
+      } else {
+        _log.w('[AudioEngine] Skipping to next due to URL failure ($_consecutiveFailures consecutive)');
+        _tryNext(myGeneration, index);
+      }
       return;
     }
 
@@ -357,9 +377,8 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
           Uri.parse(streamUrl), 
           tag: _buildMediaItem(song),
           headers: isNetwork ? {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Referer': 'https://www.youtube.com/',
-            'Origin': 'https://www.youtube.com/',
+            // Un User-Agent de dispositivo móvil genérico pero moderno es lo más seguro
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36',
           } : null,
         ),
         preload: true,
@@ -379,13 +398,27 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
       }
 
       await player.play();
+      _consecutiveFailures = 0; // Reset on success
 
       if (crossfadeFrom != null) {
         _fadeVolume(player, 0.0, 1.0, _crossfadeDuration);
       }
     } catch (e) {
       _log.e('[AudioEngine] Player Error: $e');
-      _tryNext(myGeneration, index);
+      _consecutiveFailures++;
+      
+      final isLast = index >= _queue.length - 1;
+      if (isLast || _consecutiveFailures >= 3) {
+        final reason = _consecutiveFailures >= 3 
+            ? 'Múltiples temas fallaron al cargar. Verifica tu conexión.' 
+            : 'Error de reproducción: $e';
+        onError?.call(reason);
+        _consecutiveFailures = 0; // Reset after reporting
+      } else {
+        // Report skip to UI silently or via logs
+        _log.w('[AudioEngine] Skipping to next due to failure ($_consecutiveFailures consecutive)');
+        _tryNext(myGeneration, index);
+      }
     }
   }
 

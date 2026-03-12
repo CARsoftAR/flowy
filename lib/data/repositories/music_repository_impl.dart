@@ -110,13 +110,13 @@ class MusicRepositoryImpl implements MusicRepository {
       return [
         _tryMuxedVideo,
         _tryAnyVideo,
-        _tryDefaultClient, // Fallback to audio if video fails
+        _tryAndroidVrClient, // Fallback video
       ];
     }
     return [
-      _tryAndroidClient,  // Android: cliente más compatible, URLs correctas
-      _tryDefaultClient,  // Web: fallback estándar
-      _tryIosClient,      // iOS: último recurso
+      _tryAndroidVrClient, // Android VR is very stable for audio
+      _tryIosClient,       // iOS is good for bypassing some restrictions
+      _tryAndroidClient,   // Regular Android
       _tryAnyAudio,
     ];
   }
@@ -146,26 +146,18 @@ class MusicRepositoryImpl implements MusicRepository {
     return null;
   }
 
-  /// Estrategia 1: Cliente iOS — las URLs generadas con este cliente NO tienen throttle del parámetro 'n'
+  /// Estrategia: Cliente iOS
   Future<String?> _tryIosClient(String videoId) async {
     try {
-      _log.d('Estrategia iOS para $videoId');
+      _log.d('Strategy: iOS client for $videoId');
       final manifest = await _yt.videos.streamsClient
           .getManifest(videoId, ytClients: [YoutubeApiClient.ios])
           .timeout(const Duration(seconds: 15));
 
-      final stream = manifest.audioOnly
-              .where((s) => s.container.name == 'm4a')
-              .sortByBitrate()
-              .lastOrNull ??
-          manifest.audioOnly.sortByBitrate().lastOrNull;
-
-      if (stream != null) {
-        _log.d('Estrategia iOS OK: ${stream.container.name} ${stream.bitrate}');
-        return stream.url.toString();
-      }
+      final stream = manifest.audioOnly.withHighestBitrate();
+      return stream.url.toString();
     } catch (e) {
-      _log.w('Estrategia iOS falló: $e');
+      _log.w('iOS strategy failed: $e');
     }
     return null;
   }
@@ -194,24 +186,19 @@ class MusicRepositoryImpl implements MusicRepository {
     return null;
   }
 
-  /// Estrategia 2: Cliente por defecto
-  Future<String?> _tryDefaultClient(String videoId) async {
+
+  /// Estrategia: Android VR (altamente estable para streams de audio)
+  Future<String?> _tryAndroidVrClient(String videoId) async {
     try {
-      _log.d('Estrategia 2 (cliente default) para $videoId');
+      _log.d('Strategy: Android VR for $videoId');
       final manifest = await _yt.videos.streamsClient
-          .getManifest(videoId)
-          .timeout(const Duration(seconds: 12));
+          .getManifest(videoId, ytClients: [YoutubeApiClient.androidVr])
+          .timeout(const Duration(seconds: 15));
 
-      final stream = manifest.audioOnly
-              .where((s) => s.container.name == 'm4a')
-              .sortByBitrate()
-              .lastOrNull ??
-          manifest.audioOnly.withHighestBitrate();
-
-      _log.d('Estrategia 2 OK: ${stream.container.name} ${stream.bitrate}');
+      final stream = manifest.audioOnly.withHighestBitrate();
       return stream.url.toString();
     } catch (e) {
-      _log.w('Estrategia 2 falló: $e');
+      _log.w('Android VR strategy failed: $e');
     }
     return null;
   }

@@ -226,6 +226,13 @@ class PlayerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Permite a otros componentes reportar errores que deben mostrarse al usuario
+  void reportManualError(String message) {
+    _status = PlayerStatus.error;
+    _errorMessage = message;
+    notifyListeners();
+  }
+
   void clearResumeRequest() {
     _resumeRequest = null;
     notifyListeners();
