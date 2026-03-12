@@ -304,18 +304,62 @@ class _LibraryPageState extends State<LibraryPage> {
       delegate: SliverChildBuilderDelegate(
         (context, index) {
           final song = songs[index];
-          return SongTile(
-            song: song,
-            index: index,
-            onTap: () {
-              final player = context.read<PlayerProvider>();
-              final library = context.read<LibraryProvider>();
-              player.playSong(song, queue: songs);
-              library.addToHistory(song);
-            },
+          final isDownloadView = _viewIndex == 3;
+          
+          return GestureDetector(
+            onLongPress: isDownloadView ? () => _showDeleteDownloadDialog(context, song) : null,
+            child: SongTile(
+              song: song,
+              index: index,
+              onTap: () {
+                final player = context.read<PlayerProvider>();
+                final library = context.read<LibraryProvider>();
+                player.playSong(song, queue: songs);
+                library.addToHistory(song);
+              },
+            ),
           );
         },
         childCount: songs.length,
+      ),
+    );
+  }
+
+  void _showDeleteDownloadDialog(BuildContext context, SongEntity song) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B2E),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: Colors.white10),
+        ),
+        title: const Text('Eliminar descarga', style: TextStyle(fontWeight: FontWeight.w900)),
+        content: Text(
+          '¿Quieres borrar "${song.title}" de tu dispositivo para liberar espacio?\n\nNota: Esto no recuperará tu crédito de descarga gratuita.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.white30)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              context.read<DownloadProvider>().deleteDownload(song.id);
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Archivo eliminado')),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent.withOpacity(0.8),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('BORRAR'),
+          ),
+        ],
       ),
     );
   }

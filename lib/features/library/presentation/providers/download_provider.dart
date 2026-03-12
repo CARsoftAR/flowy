@@ -33,14 +33,15 @@ class DownloadProvider extends ChangeNotifier {
   final Set<String> _fetchingIds = {};
   final Map<String, double?> _progress = {};
   final Map<String, CancelToken> _cancelTokens = {};
+  final Set<String> _spentDownloadIds = {}; // Contador persistente que no baja al borrar
   
   // Configuración de suscripción y límites
   bool _isPremium = false;
   static const int MAX_FREE_DOWNLOADS = 10;
 
   bool get isPremium => _isPremium;
-  int get remainingFreeDownloads => MAX_FREE_DOWNLOADS - _downloadedIds.length;
-  bool get canDownloadMore => _isPremium || _downloadedIds.length < MAX_FREE_DOWNLOADS;
+  int get remainingFreeDownloads => MAX_FREE_DOWNLOADS - _spentDownloadIds.length;
+  bool get canDownloadMore => _isPremium || _spentDownloadIds.length < MAX_FREE_DOWNLOADS;
   
   // Configuración de descarga ultra-agresiva
   static const int _numChunks = 8; 
@@ -69,9 +70,11 @@ class DownloadProvider extends ChangeNotifier {
   Future<void> _loadDownloadedList() async {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList('downloaded_songs') ?? [];
+    final spentList = prefs.getStringList('spent_downloads') ?? []; // Cargar histórico
     final metaJson = prefs.getString('downloaded_metadata_v2');
     
     _downloadedIds.addAll(list);
+    _spentDownloadIds.addAll(spentList);
     
     if (metaJson != null) {
       try {
@@ -115,18 +118,14 @@ class DownloadProvider extends ChangeNotifier {
   Future<void> _saveDownloadedList() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('downloaded_songs', _downloadedIds.toList());
-    
-    final Map<String, dynamic> metaMap = {};
-    _downloadedMetadata.forEach((key, s) {
-      metaMap[key] = {
-        'id': s.id,
-        'title': s.title,
-        'artist': s.artist,
-        'thumb': s.thumbnailUrl,
-        'dur': s.duration.inSeconds,
-      };
-    });
-    await prefs.setString('downloaded_metadata_v2', json.encode(metaMap));
+    await prefs.setStringList('spent_downloads', _spentDownloadIds.toList()); // Guardar histórico
+    await prefs.setString('downloaded_metadata_v2', json.encode(_downloadedMetadata.map((k, v) => MapEntry(k, {
+      'id': v.id,
+      'title': v.title,
+      'artist': v.artist,
+      'thumb': v.thumbnailUrl,
+      'dur': v.duration.inSeconds,
+    }))));
   }
 
   Future<String> getLocalPath(String id) async {
@@ -153,8 +152,11 @@ class DownloadProvider extends ChangeNotifier {
     
     final cancelToken = CancelToken();
     _cancelTokens[song.id] = cancelToken;
-
     try {
+      // Registrar en el histórico inmediatamente (consume un crédito)
+      _spentDownloadIds.add(song.id);
+      await _saveDownloadedList();
+      
       _progress[song.id] = 0.0;
       notifyListeners();
 
