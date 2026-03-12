@@ -1,53 +1,21 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../domain/entities/entities.dart';
+import '../../data/services/download_service.dart';
 
 class DownloadProvider extends ChangeNotifier {
-  // NO se usa un Dio compartido – cada descarga crea y descarta su propia instancia
-  // para evitar que YouTube acumule throttling en la misma sesión TCP.
-  Dio _newDio() => Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(minutes: 15),
-    sendTimeout: const Duration(seconds: 30),
-  ));
-
-  // Lista de User-Agents para evitar bloqueos por repetición
-  static const List<String> _userAgents = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
-    'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
-  ];
-
-  Map<String, String> _getRotatedHeaders() {
-    final random = math.Random();
-    return {
-      'User-Agent': _userAgents[random.nextInt(_userAgents.length)],
-      'Accept': '*/*',
-      'Accept-Language': 'es-AR,es;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Referer': 'https://www.youtube.com/',
-      'Origin': 'https://www.youtube.com/',
-      'Connection': 'keep-alive',
-      'Cache-Control': 'no-cache',
-      'Sec-Fetch-Dest': 'empty',
-      'Sec-Fetch-Mode': 'cors',
-      'Sec-Fetch-Site': 'cross-site',
-    };
-  }
+  // Servicio de descarga aislado con cola FIFO y dart:io HttpClient
+  final DownloadService _downloadService = DownloadService();
 
   final Set<String> _downloadedIds = {};
   final Map<String, SongEntity> _downloadedMetadata = {};
   final Set<String> _fetchingIds = {};
   final Map<String, double?> _progress = {};
-  final Map<String, CancelToken> _cancelTokens = {};
   final Set<String> _spentDownloadIds = {}; // Contador persistente que no baja al borrar
   
   // Configuración de suscripción y límites
@@ -65,10 +33,7 @@ class DownloadProvider extends ChangeNotifier {
     notifyListeners();
   }
   
-  // Configuración de descarga optimizada (menos hilos = menos riesgo de bloqueo)
-  static const int _numChunks = 4; // Bajamos de 8 a 4 para evitar throttling agresivo
-  static const int _maxConcurrent = 4;
-  
+
   DownloadProvider() {
     _loadDownloadedList();
   }
@@ -288,91 +253,73 @@ class DownloadProvider extends ChangeNotifier {
 
     final savePath = '${downloadDir.path}/${song.id}.mp3';
     
-    final cancelToken = CancelToken();
-    _cancelTokens[song.id] = cancelToken;
+    _progress[song.id] = 0.0;
+    notifyListeners();
+    
     try {
       // Registrar en el histórico inmediatamente (consume un crédito)
       _spentDownloadIds.add(song.id);
       await _saveDownloadedList();
-      
-      _progress[song.id] = 0.0;
-      notifyListeners();
 
-      // Descarga simple y discreta: UNA sola conexión
-      await _simpleDownload(song.id, streamUrl, savePath, cancelToken);
+      // Delegar al servicio de cola secuencial — bloquea hasta que el
+      // archivo esté en disco y el IOSink esté cerrado explícitamente.
+      final success = await _downloadService.enqueue(
+        id: song.id,
+        url: streamUrl,
+        savePath: savePath,
+        onProgress: (received, total) {
+          if (total > 0) {
+            _progress[song.id] = received / total;
+          } else {
+            _progress[song.id] = (received / (15 * 1024 * 1024)).clamp(0.0, 0.95);
+          }
+          notifyListeners();
+        },
+      );
 
-      // Verify file integrity
-      final file = File(savePath);
-      if (await file.exists() && await file.length() > 0) {
-        _downloadedIds.add(song.id);
-        _downloadedMetadata[song.id] = song;
-        await _saveDownloadedList();
-        return true;
-      } else {
-        throw Exception('File saved but is empty or missing');
-      }
-    } catch (e) {
-      final file = File(savePath);
-      if (await file.exists()) await file.delete();
-      if (e is DioException && e.type == DioExceptionType.cancel) {
-        debugPrint('[DownloadProvider] Descarga cancelada: ${song.title}');
-      } else {
-        debugPrint('[DownloadProvider] Error descargando ${song.title}: $e');
-        // Mostrar error al usuario
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error al descargar "${song.title}". Intenta de nuevo.'),
-              backgroundColor: Colors.red.shade700,
-              duration: const Duration(seconds: 4),
-            ),
-          );
+      if (success) {
+        final file = File(savePath);
+        if (await file.exists() && await file.length() > 0) {
+          _downloadedIds.add(song.id);
+          _downloadedMetadata[song.id] = song;
+          await _saveDownloadedList();
+          return true;
         }
+      }
+
+      // Si llegamos acá, la descarga falló en el servicio (ya loggeado)
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al descargar "${song.title}". Verificá tu conexión e intentá de nuevo.'),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[DownloadProvider] Unexpected error for ${song.id}: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error inesperado: ${e.runtimeType}'),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 4),
+          ),
+        );
       }
       return false;
     } finally {
-      _cancelTokens.remove(song.id);
       _progress.remove(song.id);
       notifyListeners();
     }
   }
 
-  // Descarga limpia - las URLs de YouTube son pre-firmadas, no necesitan headers extras
-  Future<void> _simpleDownload(String id, String url, String path, CancelToken token) async {
-    final dio = _newDio();
-    try {
-      await dio.download(
-        url,
-        path,
-        cancelToken: token,
-        options: Options(
-          // URLs pre-firmadas de YouTube: NO agregar Referer/Origin, eso las invalida
-          headers: {
-            'User-Agent': 'com.google.android.youtube/17.36.4 (Linux; U; Android 12; GB) gzip',
-          },
-          receiveTimeout: const Duration(minutes: 15),
-          followRedirects: true,
-        ),
-        onReceiveProgress: (received, total) {
-          if (total > 0) {
-            _progress[id] = received / total;
-          } else {
-            _progress[id] = (received / (10 * 1024 * 1024)).clamp(0.0, 0.95);
-          }
-          notifyListeners();
-        },
-      );
-    } catch (e) {
-      final f = File(path);
-      if (await f.exists()) await f.delete();
-      rethrow;
-    } finally {
-      dio.close(force: true);
-    }
-  }
-
   void cancelDownload(String id) {
-    _cancelTokens[id]?.cancel();
+    _downloadService.cancel(id);
+    _progress.remove(id);
+    notifyListeners();
   }
 
   void _showPremiumRequiredDialog(BuildContext context) {
