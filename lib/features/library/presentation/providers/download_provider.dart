@@ -52,7 +52,10 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   Set<String> get downloadedIds => _downloadedIds;
-  List<SongEntity> get downloadedSongs => _downloadedMetadata.values.toList();
+  List<SongEntity> get downloadedSongs => _downloadedIds
+      .map((id) => _downloadedMetadata[id])
+      .whereType<SongEntity>()
+      .toList();
   double? getProgress(String id) => _progress[id];
   bool isDownloaded(String id) => _downloadedIds.contains(id);
   bool isDownloading(String id) => _progress.containsKey(id);
