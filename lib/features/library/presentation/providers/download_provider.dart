@@ -165,21 +165,11 @@ class DownloadProvider extends ChangeNotifier {
     return '${dir.path}/downloads/$id.mp3';
   }
 
-  Future<int> getStreamSize(String url) async {
-    final dio = _newDio();
-    try {
-      final headers = _getRotatedHeaders();
-      final res = await dio.get(url, options: Options(
-        headers: {...headers, 'Range': 'bytes=0-0'},
-        followRedirects: true,
-      ));
-      return int.tryParse(res.headers.value('content-range')?.split('/').last ?? '') ?? 
-             int.tryParse(res.headers.value('content-length') ?? '') ?? 0;
-    } catch (_) {
-      return 0;
-    } finally {
-      dio.close();
-    }
+  /// Estima el tamaño en bytes basado en la duración de la canción (sin hacer requests)
+  int estimateSize(Duration duration) {
+    // YouTube da audio a ~128kbps promedio para música
+    const int bitsPerSecond = 128 * 1024;
+    return (duration.inSeconds * bitsPerSecond) ~/ 8;
   }
 
   void showDownloadConfirmDialog({
@@ -295,8 +285,8 @@ class DownloadProvider extends ChangeNotifier {
       _progress[song.id] = 0.0;
       notifyListeners();
 
-      // Implementación de descarga ultra-rápida usando 3 conexiones paralelas (Chunks)
-      await _acceleratedDownload(song.id, streamUrl, savePath, cancelToken);
+      // Descarga simple y discreta: UNA sola conexión
+      await _simpleDownload(song.id, streamUrl, savePath, cancelToken);
 
       // Verify file integrity
       final file = File(savePath);
@@ -326,105 +316,34 @@ class DownloadProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _acceleratedDownload(String id, String url, String path, CancelToken token) async {
-    // Instancia Dio NUEVA y descartable para esta descarga
+  // Descarga simple, lineal y discreta - UNA sola conexión al CDN de YouTube
+  Future<void> _simpleDownload(String id, String url, String path, CancelToken token) async {
     final dio = _newDio();
     final headers = _getRotatedHeaders();
-    try {
-      // 1. Obtener Metadatos y Tamaño con la instancia fresca
-      final headRes = await dio.get(url, options: Options(
-        headers: {...headers, 'Range': 'bytes=0-0'},
-        followRedirects: true,
-      ));
-      
-      final total = int.tryParse(headRes.headers.value('content-range')?.split('/').last ?? '') ?? 
-                    int.tryParse(headRes.headers.value('content-length') ?? '') ?? 0;
-
-      // Si no podemos determinar tamaño o es pequeño, descarga estándar con conexión limpia
-      if (total < 3 * 1024 * 1024) {
-        await dio.download(url, path, cancelToken: token, options: Options(headers: headers),
-          onReceiveProgress: (r, t) {
-            if (t > 0) { _progress[id] = r / t; notifyListeners(); }
-          }
-        );
-        return;
-      }
-
-      // 2. Fragmentación: cada chunk usa su propio Dio descartable
-      const int chunks = _numChunks;
-      final int chunkSize = (total / chunks).ceil();
-      final List<String> partPaths = List.generate(chunks, (i) => '$path.part$i');
-      final List<int> progressList = List.filled(chunks, 0);
-      
-      final futures = <Future>[];
-      for (int i = 0; i < chunks; i++) {
-        final start = i * chunkSize;
-        final end = (i == chunks - 1) ? total - 1 : (i + 1) * chunkSize - 1;
-        futures.add(_downloadChunk(url, partPaths[i], start, end, headers, token, (received) {
-          progressList[i] = received;
-          final sum = progressList.reduce((a, b) => a + b);
-          _progress[id] = sum / total;
-          notifyListeners();
-        }));
-      }
-
-      await Future.wait(futures);
-
-      // 3. Ensamblaje de fragmentos
-      final outputFile = File(path);
-      final sink = outputFile.openWrite();
-      for (final p in partPaths) {
-        final f = File(p);
-        await sink.addStream(f.openRead());
-        await f.delete();
-      }
-      await sink.close();
-      
-    } catch (e) {
-      for (int i = 0; i < _numChunks; i++) {
-        final f = File('$path.part$i');
-        if (await f.exists()) await f.delete();
-      }
-      rethrow;
-    } finally {
-      // ¡Siempre liberar el cliente para que no queden conexiones abiertas!
-      dio.close(force: true);
-    }
-  }
-
-  Future<void> _downloadChunk(String url, String path, int start, int end, Map<String, String> headers, CancelToken token, Function(int) onProgress) async {
-    // Cada chunk también usa su propio Dio descartable
-    final dio = _newDio();
     try {
       await dio.download(
         url,
         path,
         cancelToken: token,
         options: Options(
-          headers: {...headers, 'Range': 'bytes=$start-$end'},
-          receiveTimeout: const Duration(seconds: 60),
+          headers: headers,
+          receiveTimeout: const Duration(minutes: 10),
+          followRedirects: true,
         ),
-        onReceiveProgress: (received, _) => onProgress(received),
+        onReceiveProgress: (received, total) {
+          if (total > 0) {
+            _progress[id] = received / total;
+          } else {
+            // Estimar progreso con 128kbps si no llega Content-Length
+            _progress[id] = (received / (10 * 1024 * 1024)).clamp(0.0, 0.95);
+          }
+          notifyListeners();
+        },
       );
     } catch (e) {
-      if (e is DioException && e.type == DioExceptionType.cancel) rethrow;
-      // Reintento con nueva conexión limpia si hay error de red
-      final retryDio = _newDio();
-      try {
-        await Future.delayed(const Duration(seconds: 2));
-        await retryDio.download(
-          url,
-          path,
-          cancelToken: token,
-          options: Options(
-            headers: {..._getRotatedHeaders(), 'Range': 'bytes=$start-$end'},
-            receiveTimeout: const Duration(seconds: 60),
-          ),
-          onReceiveProgress: (received, _) => onProgress(received),
-        );
-      } finally {
-        retryDio.close(force: true);
-      }
+      final f = File(path);
+      if (await f.exists()) await f.delete();
+      rethrow;
     } finally {
       dio.close(force: true);
     }

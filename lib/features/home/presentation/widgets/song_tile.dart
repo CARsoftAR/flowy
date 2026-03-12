@@ -232,7 +232,8 @@ class SongTile extends StatelessWidget {
                               );
                             },
                             (url) async {
-                              final size = await downloader.getStreamSize(url);
+                              // Estimación local (sin requests extra) para no saturar YouTube
+                              final size = downloader.estimateSize(song.duration);
                               downloader.setFetching(song.id, false);
                               if (context.mounted) {
                                 downloader.showDownloadConfirmDialog(
