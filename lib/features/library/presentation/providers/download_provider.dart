@@ -42,6 +42,13 @@ class DownloadProvider extends ChangeNotifier {
   bool get isPremium => _isPremium;
   int get remainingFreeDownloads => MAX_FREE_DOWNLOADS - _spentDownloadIds.length;
   bool get canDownloadMore => _isPremium || _spentDownloadIds.length < MAX_FREE_DOWNLOADS;
+
+  void becomePremium() async {
+    _isPremium = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_premium_user', true);
+    notifyListeners();
+  }
   
   // Configuración de descarga ultra-agresiva
   static const int _numChunks = 8; 
@@ -75,6 +82,7 @@ class DownloadProvider extends ChangeNotifier {
     final list = prefs.getStringList('downloaded_songs') ?? [];
     final spentList = prefs.getStringList('spent_downloads') ?? []; // Cargar histórico
     final metaJson = prefs.getString('downloaded_metadata_v2');
+    _isPremium = prefs.getBool('is_premium_user') ?? false; // Cargar estado premium
     
     _downloadedIds.addAll(list);
     _spentDownloadIds.addAll(spentList);
@@ -287,94 +295,100 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   void _showPremiumRequiredDialog(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    // Colores Esmeralda Suave y vibrantes
+    const emeraldPrimary = Color(0xFF2ECC71);
+    const emeraldDeep = Color(0xFF1ABC9C);
+    const emeraldSoft = Color(0xFFD1F2EB);
     
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
       barrierLabel: '',
-      transitionDuration: const Duration(milliseconds: 400),
+      transitionDuration: const Duration(milliseconds: 500),
       pageBuilder: (context, anim1, anim2) => const SizedBox.shrink(),
       transitionBuilder: (context, anim1, anim2, child) {
-        final curve = Curves.easeInOutBack.transform(anim1.value);
+        final curve = Curves.elasticOut.transform(anim1.value);
         return Transform.scale(
           scale: curve,
           child: Opacity(
             opacity: anim1.value,
             child: AlertDialog(
-              backgroundColor: const Color(0xFF161B2E),
+              backgroundColor: const Color(0xFF0D1B1E), // Fondo verde muy oscuro
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(32),
-                side: BorderSide(color: scheme.primary.withOpacity(0.2), width: 1),
+                borderRadius: BorderRadius.circular(35),
+                side: BorderSide(color: emeraldPrimary.withOpacity(0.3), width: 1.5),
               ),
               contentPadding: EdgeInsets.zero,
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Header con Gradiente Vibrante
+                  // Header con Gradiente Esmeralda "Vivo"
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    padding: const EdgeInsets.symmetric(vertical: 45),
                     decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-                      gradient: LinearGradient(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(35)),
+                      gradient: const LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          scheme.primary,
-                          scheme.tertiary,
-                          const Color(0xFFE94560),
+                          emeraldPrimary,
+                          emeraldDeep,
+                          Color(0xFF00B894),
                         ],
                       ),
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Icon(
-                          Icons.workspace_premium_rounded,
-                          color: Colors.white.withOpacity(0.9),
-                          size: 80,
-                        ).animate(onPlay: (c) => c.repeat())
-                          .shimmer(duration: 2.seconds, color: Colors.white24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: emeraldPrimary.withOpacity(0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
                       ],
                     ),
+                    child: Icon(
+                      Icons.stars_rounded,
+                      color: Colors.white,
+                      size: 90,
+                    ).animate(onPlay: (c) => c.repeat())
+                      .shimmer(duration: 2.seconds, color: Colors.white30)
+                      .scale(duration: 1.seconds, begin: const Offset(0.9, 0.9), end: const Offset(1.1, 1.1), curve: Curves.easeInOut),
                   ),
                   
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                    padding: const EdgeInsets.all(28),
                     child: Column(
                       children: [
-                        Text(
-                          '¡SÉ PREMIUM!',
+                        const Text(
+                          '¡FLOWY PREMIUM!',
                           style: TextStyle(
-                            fontSize: 28,
+                            fontSize: 26,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: 1.2,
-                            color: scheme.primary,
+                            letterSpacing: 2,
+                            color: emeraldPrimary,
                           ),
                         ),
                         const SizedBox(height: 12),
                         const Text(
-                          'Has alcanzado el límite de 10 descargas gratuitas.',
+                          'Desbloquea todo el potencial de tu música.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
+                            fontSize: 15,
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w400,
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 24),
                         Container(
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.all(18),
                           decoration: BoxDecoration(
-                            color: scheme.primary.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(16),
+                            color: emeraldPrimary.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(22),
                           ),
                           child: Column(
                             children: [
-                              _buildFeatureRow(Icons.all_inclusive_rounded, 'Descargas ilimitadas', scheme),
-                              _buildFeatureRow(Icons.high_quality_rounded, 'Calidad de audio máxima', scheme),
-                              _buildFeatureRow(Icons.block_rounded, 'Sin publicidad', scheme),
+                              _buildFeatureRow(Icons.all_inclusive_rounded, 'Descargas sin límites', emeraldPrimary),
+                              _buildFeatureRow(Icons.high_quality_rounded, 'Calidad Ultra HD (320kbps)', emeraldPrimary),
+                              _buildFeatureRow(Icons.bolt_rounded, 'Descargas 10x más rápidas', emeraldPrimary),
                             ],
                           ),
                         ),
@@ -383,32 +397,44 @@ class DownloadProvider extends ChangeNotifier {
                   ),
 
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    padding: const EdgeInsets.fromLTRB(28, 0, 28, 32),
                     child: Column(
                       children: [
                         SizedBox(
                           width: double.infinity,
-                          height: 56,
+                          height: 62,
                           child: ElevatedButton(
-                            onPressed: () => Navigator.pop(context),
+                            onPressed: () {
+                              // Aquí simulamos que el usuario paga
+                              becomePremium();
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  backgroundColor: emeraldPrimary,
+                                  content: Text('🎉 ¡Felicidades! Ahora eres FLOWY PREMIUM', style: TextStyle(fontWeight: FontWeight.bold)),
+                                ),
+                              );
+                            },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: scheme.primary,
+                              backgroundColor: emeraldPrimary,
                               foregroundColor: Colors.white,
-                              elevation: 12,
-                              shadowColor: scheme.primary.withOpacity(0.4),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              elevation: 15,
+                              shadowColor: emeraldPrimary.withOpacity(0.5),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
                             ),
                             child: const Text(
-                              'OBTENER PREMIUM',
-                              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1),
+                              'VOLVERME PREMIUM',
+                              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, letterSpacing: 1),
                             ),
-                          ),
+                          ).animate(onPlay: (c) => c.repeat(reverse: true))
+                           .scale(duration: 1.seconds, begin: const Offset(1, 1), end: const Offset(1.03, 1.03)),
                         ),
+                        const SizedBox(height: 8),
                         TextButton(
                           onPressed: () => Navigator.pop(context),
                           child: Text(
-                            'TAL VEZ LUEGO',
-                            style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 12, fontWeight: FontWeight.bold),
+                            'TAL VEZ LATER',
+                            style: TextStyle(color: Colors.white.withOpacity(0.25), fontSize: 13, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
@@ -423,12 +449,12 @@ class DownloadProvider extends ChangeNotifier {
     );
   }
 
-  Widget _buildFeatureRow(IconData icon, String text, ColorScheme scheme) {
+  Widget _buildFeatureRow(IconData icon, String text, Color color) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: scheme.secondary),
+          Icon(icon, size: 18, color: color),
           const SizedBox(width: 12),
           Text(text, style: const TextStyle(color: Colors.white70, fontSize: 13)),
         ],
