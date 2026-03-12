@@ -1,6 +1,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -15,18 +16,30 @@ class DownloadProvider extends ChangeNotifier {
     sendTimeout: const Duration(seconds: 20),
   ));
 
-  // Headers de alta fidelidad para simular un navegador y evitar límites de velocidad
-  static const Map<String, String> _optimizedHeaders = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept': '*/*',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Referer': 'https://www.youtube.com/',
-    'Origin': 'https://www.youtube.com/',
-    'Connection': 'keep-alive',
-    'Sec-Fetch-Dest': 'empty',
-    'Sec-Fetch-Mode': 'cors',
-    'Sec-Fetch-Site': 'cross-site',
-  };
+  // Lista de User-Agents para evitar bloqueos por repetición
+  static const List<String> _userAgents = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
+  ];
+
+  Map<String, String> _getRotatedHeaders() {
+    final random = math.Random();
+    return {
+      'User-Agent': _userAgents[random.nextInt(_userAgents.length)],
+      'Accept': '*/*',
+      'Accept-Language': 'es-AR,es;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Referer': 'https://www.youtube.com/',
+      'Origin': 'https://www.youtube.com/',
+      'Connection': 'keep-alive',
+      'Cache-Control': 'no-cache',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'cross-site',
+    };
+  }
 
   final Set<String> _downloadedIds = {};
   final Map<String, SongEntity> _downloadedMetadata = {};
@@ -50,9 +63,9 @@ class DownloadProvider extends ChangeNotifier {
     notifyListeners();
   }
   
-  // Configuración de descarga ultra-agresiva
-  static const int _numChunks = 8; 
-  static const int _maxConcurrent = 8;
+  // Configuración de descarga optimizada (menos hilos = menos riesgo de bloqueo)
+  static const int _numChunks = 4; // Bajamos de 8 a 4 para evitar throttling agresivo
+  static const int _maxConcurrent = 4;
   
   DownloadProvider() {
     _loadDownloadedList();
@@ -86,6 +99,9 @@ class DownloadProvider extends ChangeNotifier {
     
     _downloadedIds.addAll(list);
     _spentDownloadIds.addAll(spentList);
+    // Asegurar que las descargas actuales también cuenten en el histórico (migración)
+    _spentDownloadIds.addAll(_downloadedIds);
+    await _saveDownloadedList(); // Persistir si hubo migración
     
     if (metaJson != null) {
       try {
@@ -203,19 +219,20 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   Future<void> _acceleratedDownload(String id, String url, String path, CancelToken token) async {
+    final headers = _getRotatedHeaders();
     try {
-      // 1. Obtener Metadatos y Tamaño (usando un rango de 1 byte para forzar respuesta de servidor)
+      // 1. Obtener Metadatos y Tamaño
       final headRes = await _dio.get(url, options: Options(
-        headers: {..._optimizedHeaders, 'Range': 'bytes=0-0'},
+        headers: {...headers, 'Range': 'bytes=0-0'},
         followRedirects: true,
       ));
       
       final total = int.tryParse(headRes.headers.value('content-range')?.split('/').last ?? '') ?? 
                     int.tryParse(headRes.headers.value('content-length') ?? '') ?? 0;
 
-      // Si no podemos determinar tamaño o es pequeño (< 3MB), descarga estándar optimizada
+      // Si no podemos determinar tamaño o es pequeño (< 3MB), descarga estándar
       if (total < 3 * 1024 * 1024) {
-        await _dio.download(url, path, cancelToken: token, options: Options(headers: _optimizedHeaders),
+        await _dio.download(url, path, cancelToken: token, options: Options(headers: headers),
           onReceiveProgress: (r, t) {
             if (t > 0) { _progress[id] = r / t; notifyListeners(); }
           }
@@ -223,20 +240,19 @@ class DownloadProvider extends ChangeNotifier {
         return;
       }
 
-      // 2. Configurar 8 hilos de descarga paralelos para saturar el ancho de banda
+      // 2. Fragmentación inteligente con headers variados
       const int chunks = _numChunks;
       final int chunkSize = (total / chunks).ceil();
       final List<String> partPaths = List.generate(chunks, (i) => '$path.part$i');
       final List<int> progressList = List.filled(chunks, 0);
       
-      // Usamos un limitador de concurrencia implícito con Future.wait
       final futures = <Future>[];
       for (int i = 0; i < chunks; i++) {
         final start = i * chunkSize;
         final end = (i == chunks - 1) ? total - 1 : (i + 1) * chunkSize - 1;
         
-        // Cada hilo tiene su propio reintento interno para evitar que un fallo de red tire toda la descarga
-        futures.add(_downloadChunk(url, partPaths[i], start, end, token, (received) {
+        // Cada fragmento usa el pool de headers pero mantiene coherencia
+        futures.add(_downloadChunk(url, partPaths[i], start, end, headers, token, (received) {
           progressList[i] = received;
           final sum = progressList.reduce((a, b) => a + b);
           _progress[id] = sum / total;
@@ -267,7 +283,7 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   /// Descarga un fragmento específico con lógica de reintento para máxima fiabilidad
-  Future<void> _downloadChunk(String url, String path, int start, int end, CancelToken token, Function(int) onProgress) async {
+  Future<void> _downloadChunk(String url, String path, int start, int end, Map<String, String> headers, CancelToken token, Function(int) onProgress) async {
     int retryCount = 0;
     while (retryCount < 3) {
       try {
@@ -276,7 +292,7 @@ class DownloadProvider extends ChangeNotifier {
           path,
           cancelToken: token,
           options: Options(
-            headers: {..._optimizedHeaders, 'Range': 'bytes=$start-$end'},
+            headers: {...headers, 'Range': 'bytes=$start-$end'},
             receiveTimeout: const Duration(seconds: 45),
           ),
           onReceiveProgress: (received, _) => onProgress(received),
@@ -351,7 +367,8 @@ class DownloadProvider extends ChangeNotifier {
                       size: 90,
                     ).animate(onPlay: (c) => c.repeat())
                       .shimmer(duration: 2.seconds, color: Colors.white30)
-                      .scale(duration: 1.seconds, begin: const Offset(0.9, 0.9), end: const Offset(1.1, 1.1), curve: Curves.easeInOut),
+                      .scale(duration: 1.seconds, begin: const Offset(0.9, 0.9), end: const Offset(1.1, 1.1), curve: Curves.easeInOut)
+                      .moveY(begin: -5, end: 5, duration: 2.seconds, curve: Curves.easeInOut),
                   ),
                   
                   Padding(
@@ -366,7 +383,7 @@ class DownloadProvider extends ChangeNotifier {
                             letterSpacing: 2,
                             color: emeraldPrimary,
                           ),
-                        ),
+                        ).animate().fadeIn(duration: 600.ms).moveY(begin: 10, end: 0),
                         const SizedBox(height: 12),
                         const Text(
                           'Desbloquea todo el potencial de tu música.',
@@ -390,7 +407,7 @@ class DownloadProvider extends ChangeNotifier {
                               _buildFeatureRow(Icons.high_quality_rounded, 'Calidad Ultra HD (320kbps)', emeraldPrimary),
                               _buildFeatureRow(Icons.bolt_rounded, 'Descargas 10x más rápidas', emeraldPrimary),
                             ],
-                          ),
+                          ).animate().fadeIn(delay: 400.ms),
                         ),
                       ],
                     ),
@@ -405,13 +422,23 @@ class DownloadProvider extends ChangeNotifier {
                           height: 62,
                           child: ElevatedButton(
                             onPressed: () {
-                              // Aquí simulamos que el usuario paga
+                              // INTEGRACIÓN MERCADO PAGO: 
+                              // 1. Llamar al backend para crear preferencia.
+                              // 2. Abrir Checkout Pro con url_launcher.
+                              // 3. Al volver, si el pago es exitoso, llamar a becomePremium().
                               becomePremium();
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   backgroundColor: emeraldPrimary,
-                                  content: Text('🎉 ¡Felicidades! Ahora eres FLOWY PREMIUM', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  duration: Duration(seconds: 4),
+                                  content: Row(
+                                    children: [
+                                      Icon(Icons.check_circle_rounded, color: Colors.white),
+                                      SizedBox(width: 12),
+                                      Text('🎉 ¡Felicidades! Ahora eres FLOWY PREMIUM', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
                                 ),
                               );
                             },
@@ -427,7 +454,7 @@ class DownloadProvider extends ChangeNotifier {
                               style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, letterSpacing: 1),
                             ),
                           ).animate(onPlay: (c) => c.repeat(reverse: true))
-                           .scale(duration: 1.seconds, begin: const Offset(1, 1), end: const Offset(1.03, 1.03)),
+                           .scale(duration: 1200.ms, begin: const Offset(1, 1), end: const Offset(1.04, 1.04), curve: Curves.easeInOut),
                         ),
                         const SizedBox(height: 8),
                         TextButton(
