@@ -218,36 +218,14 @@ class SongTile extends StatelessWidget {
                              duration: Duration(seconds: 2),
                            ),
                          );
-                      } : () async {
+                      } : () {
                         HapticFeedback.mediumImpact();
-                        downloader.setFetching(song.id, true);
-                        try {
-                          final repo = sl<MusicRepository>();
-                          final result = await repo.getStreamUrl(song.id);
-                          result.fold(
-                            (f) {
-                              downloader.setFetching(song.id, false);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Error: ${f.message}')),
-                              );
-                            },
-                            (url) async {
-                              // Estimación local (sin requests extra) para no saturar YouTube
-                              final size = downloader.estimateSize(song.duration);
-                              downloader.setFetching(song.id, false);
-                              if (context.mounted) {
-                                downloader.showDownloadConfirmDialog(
-                                  context: context,
-                                  song: song,
-                                  streamUrl: url,
-                                  sizeBytes: size,
-                                );
-                              }
-                            },
-                          );
-                        } catch (e) {
-                          downloader.setFetching(song.id, false);
-                        }
+                        final size = downloader.estimateSize(song.duration);
+                        downloader.showDownloadConfirmDialog(
+                          context: context,
+                          song: song,
+                          sizeBytes: size,
+                        );
                       },
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),

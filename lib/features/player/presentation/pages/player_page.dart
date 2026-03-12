@@ -432,16 +432,7 @@ class _PlayerPageState extends State<PlayerPage>
                         download.cancelDownload(song.id);
                       } else {
                         HapticFeedback.lightImpact();
-                        // Trigger fetch of stream URL first if not present
-                        final streamUrl = player.handler.currentSong?.streamUrl;
-                        if (streamUrl != null) {
-                           download.downloadSong(song, streamUrl, context: context);
-                        } else {
-                           // Try to resolve it? Usually currentSong has it if playing
-                           ScaffoldMessenger.of(context).showSnackBar(
-                             const SnackBar(content: Text('No se puede descargar ahora.')),
-                           );
-                        }
+                        download.downloadSong(song, context: context);
                       }
                     },
                     icon: isDownloading

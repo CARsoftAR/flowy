@@ -5,12 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import '../../../../core/di/injection.dart';
 import '../../../../domain/entities/entities.dart';
 import '../../data/services/download_service.dart';
 
 class DownloadProvider extends ChangeNotifier {
-  // Servicio de descarga aislado con cola FIFO y dart:io HttpClient
-  final DownloadService _downloadService = DownloadService();
+  final DownloadService _downloadService;
 
   final Set<String> _downloadedIds = {};
   final Map<String, SongEntity> _downloadedMetadata = {};
@@ -34,7 +35,7 @@ class DownloadProvider extends ChangeNotifier {
   }
   
 
-  DownloadProvider() {
+  DownloadProvider() : _downloadService = DownloadService(sl<YoutubeExplode>()) {
     _loadDownloadedList();
   }
 
@@ -138,7 +139,6 @@ class DownloadProvider extends ChangeNotifier {
   void showDownloadConfirmDialog({
     required BuildContext context,
     required SongEntity song,
-    required String streamUrl,
     required int sizeBytes,
   }) {
     final emeraldPrimary = const Color(0xFF2ECC71);
@@ -204,7 +204,7 @@ class DownloadProvider extends ChangeNotifier {
                 ElevatedButton(
                   onPressed: () async {
                     Navigator.pop(context);
-                    final success = await downloadSong(song, streamUrl, context: context);
+                    final success = await downloadSong(song, context: context);
                     if (success && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -236,7 +236,7 @@ class DownloadProvider extends ChangeNotifier {
     );
   }
 
-  Future<bool> downloadSong(SongEntity song, String streamUrl, {required BuildContext context}) async {
+  Future<bool> downloadSong(SongEntity song, {required BuildContext context}) async {
     if (isDownloaded(song.id) || isDownloading(song.id)) return false;
 
     // Verificar límite de versión Free
@@ -265,7 +265,6 @@ class DownloadProvider extends ChangeNotifier {
       // archivo esté en disco y el IOSink esté cerrado explícitamente.
       final success = await _downloadService.enqueue(
         id: song.id,
-        url: streamUrl,
         savePath: savePath,
         onProgress: (received, total) {
           if (total > 0) {
