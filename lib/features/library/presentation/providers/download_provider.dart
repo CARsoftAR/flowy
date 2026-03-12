@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../domain/entities/entities.dart';
@@ -35,7 +36,7 @@ class DownloadProvider extends ChangeNotifier {
   
   // Configuración de suscripción y límites
   bool _isPremium = false;
-  static const int MAX_FREE_DOWNLOADS = 5;
+  static const int MAX_FREE_DOWNLOADS = 10;
 
   bool get isPremium => _isPremium;
   int get remainingFreeDownloads => MAX_FREE_DOWNLOADS - _downloadedIds.length;
@@ -282,46 +283,149 @@ class DownloadProvider extends ChangeNotifier {
 
   void _showPremiumRequiredDialog(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    showDialog(
+    
+    showGeneralDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1C2131),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        icon: Icon(Icons.workspace_premium_rounded, color: scheme.primary, size: 48),
-        title: const Text('Límite Alcanzado', style: TextStyle(fontWeight: FontWeight.w900)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Has alcanzado el límite de 5 descargas de la versión gratuita.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70),
+      barrierDismissible: true,
+      barrierLabel: '',
+      transitionDuration: const Duration(milliseconds: 400),
+      pageBuilder: (context, anim1, anim2) => const SizedBox.shrink(),
+      transitionBuilder: (context, anim1, anim2, child) {
+        final curve = Curves.easeInOutBack.transform(anim1.value);
+        return Transform.scale(
+          scale: curve,
+          child: Opacity(
+            opacity: anim1.value,
+            child: AlertDialog(
+              backgroundColor: const Color(0xFF161B2E),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(32),
+                side: BorderSide(color: scheme.primary.withOpacity(0.2), width: 1),
+              ),
+              contentPadding: EdgeInsets.zero,
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header con Gradiente Vibrante
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          scheme.primary,
+                          scheme.tertiary,
+                          const Color(0xFFE94560),
+                        ],
+                      ),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(
+                          Icons.workspace_premium_rounded,
+                          color: Colors.white.withOpacity(0.9),
+                          size: 80,
+                        ).animate(onPlay: (c) => c.repeat())
+                          .shimmer(duration: 2.seconds, color: Colors.white24),
+                      ],
+                    ),
+                  ),
+                  
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                    child: Column(
+                      children: [
+                        Text(
+                          '¡SÉ PREMIUM!',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                            color: scheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Has alcanzado el límite de 10 descargas gratuitas.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: scheme.primary.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Column(
+                            children: [
+                              _buildFeatureRow(Icons.all_inclusive_rounded, 'Descargas ilimitadas', scheme),
+                              _buildFeatureRow(Icons.high_quality_rounded, 'Calidad de audio máxima', scheme),
+                              _buildFeatureRow(Icons.block_rounded, 'Sin publicidad', scheme),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: scheme.primary,
+                              foregroundColor: Colors.white,
+                              elevation: 12,
+                              shadowColor: scheme.primary.withOpacity(0.4),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            ),
+                            child: const Text(
+                              'OBTENER PREMIUM',
+                              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1),
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            'TAL VEZ LUEGO',
+                            style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Pásate a Flowy Premium para descargas ilimitadas y calidad ultra alta.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white30, fontSize: 13),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Ahora no', style: TextStyle(color: Colors.white24)),
           ),
-          ElevatedButton(
-            onPressed: () {
-              // Aquí iría la lógica de compra, por ahora solo cerramos
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: scheme.primary,
-              foregroundColor: Colors.white,
-              shape: const StadiumBorder(),
-            ),
-            child: const Text('SER PREMIUM'),
-          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFeatureRow(IconData icon, String text, ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: scheme.secondary),
+          const SizedBox(width: 12),
+          Text(text, style: const TextStyle(color: Colors.white70, fontSize: 13)),
         ],
       ),
     );
