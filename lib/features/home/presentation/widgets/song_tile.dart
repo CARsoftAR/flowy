@@ -232,15 +232,14 @@ class SongTile extends StatelessWidget {
                               );
                             },
                             (url) async {
+                              final size = await downloader.getStreamSize(url);
                               downloader.setFetching(song.id, false);
-                              final success = await downloader.downloadSong(song, url, context: context);
-                              if (context.mounted && success) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(success ? '¡Descargado!' : 'Error al descargar'),
-                                    duration: const Duration(seconds: 2),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
+                              if (context.mounted) {
+                                (downloader as dynamic)._showDownloadConfirmDialog(
+                                  context: context,
+                                  song: song,
+                                  streamUrl: url,
+                                  sizeBytes: size,
                                 );
                               }
                             },

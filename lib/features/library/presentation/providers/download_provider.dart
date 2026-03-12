@@ -161,6 +161,106 @@ class DownloadProvider extends ChangeNotifier {
     return '${dir.path}/downloads/$id.mp3';
   }
 
+  Future<int> getStreamSize(String url) async {
+    try {
+      final headers = _getRotatedHeaders();
+      final res = await _dio.get(url, options: Options(
+        headers: {...headers, 'Range': 'bytes=0-0'},
+        followRedirects: true,
+      ));
+      return int.tryParse(res.headers.value('content-range')?.split('/').last ?? '') ?? 
+             int.tryParse(res.headers.value('content-length') ?? '') ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  void _showDownloadConfirmDialog({
+    required BuildContext context,
+    required SongEntity song,
+    required String streamUrl,
+    required int sizeBytes,
+  }) {
+    final emeraldPrimary = const Color(0xFF2ECC71);
+    final sizeMb = (sizeBytes / (1024 * 1024)).toStringAsFixed(1);
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) => const SizedBox.shrink(),
+      transitionBuilder: (context, anim1, anim2, child) {
+        return Transform.scale(
+          scale: Curves.easeOutBack.transform(anim1.value),
+          child: Opacity(
+            opacity: anim1.value,
+            child: AlertDialog(
+              backgroundColor: const Color(0xFF0D1B1E),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+                side: BorderSide(color: emeraldPrimary.withOpacity(0.2), width: 1),
+              ),
+              title: Row(
+                children: [
+                  Icon(Icons.download_for_offline_rounded, color: emeraldPrimary),
+                  const SizedBox(width: 12),
+                  const Text('Confirmar descarga', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Text(
+                    song.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                  Text(song.artist, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: emeraldPrimary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.sd_storage_rounded, color: emeraldPrimary, size: 20),
+                        const SizedBox(width: 12),
+                        Text('Espacio necesario: $sizeMb MB', style: TextStyle(color: emeraldPrimary, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('CANCELAR', style: TextStyle(color: Colors.white24, fontWeight: FontWeight.bold)),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    downloadSong(song, streamUrl, context: context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: emeraldPrimary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('DESCARGAR AHORA', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<bool> downloadSong(SongEntity song, String streamUrl, {required BuildContext context}) async {
     if (isDownloaded(song.id) || isDownloading(song.id)) return false;
 
