@@ -13,11 +13,9 @@ class DownloadProvider extends ChangeNotifier {
   // NO se usa un Dio compartido – cada descarga crea y descarta su propia instancia
   // para evitar que YouTube acumule throttling en la misma sesión TCP.
   Dio _newDio() => Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 20),
-    receiveTimeout: const Duration(seconds: 180),
-    sendTimeout: const Duration(seconds: 20),
-    // No mantener conexiones vivas entre descargas
-    validateStatus: (status) => status != null && status < 500,
+    connectTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(minutes: 15),
+    sendTimeout: const Duration(seconds: 30),
   ));
 
   // Lista de User-Agents para evitar bloqueos por repetición
@@ -339,25 +337,26 @@ class DownloadProvider extends ChangeNotifier {
     }
   }
 
-  // Descarga simple, lineal y discreta - UNA sola conexión al CDN de YouTube
+  // Descarga limpia - las URLs de YouTube son pre-firmadas, no necesitan headers extras
   Future<void> _simpleDownload(String id, String url, String path, CancelToken token) async {
     final dio = _newDio();
-    final headers = _getRotatedHeaders();
     try {
       await dio.download(
         url,
         path,
         cancelToken: token,
         options: Options(
-          headers: headers,
-          receiveTimeout: const Duration(minutes: 10),
+          // URLs pre-firmadas de YouTube: NO agregar Referer/Origin, eso las invalida
+          headers: {
+            'User-Agent': 'com.google.android.youtube/17.36.4 (Linux; U; Android 12; GB) gzip',
+          },
+          receiveTimeout: const Duration(minutes: 15),
           followRedirects: true,
         ),
         onReceiveProgress: (received, total) {
           if (total > 0) {
             _progress[id] = received / total;
           } else {
-            // Estimar progreso con 128kbps si no llega Content-Length
             _progress[id] = (received / (10 * 1024 * 1024)).clamp(0.0, 0.95);
           }
           notifyListeners();
