@@ -10,10 +10,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../domain/entities/entities.dart';
 
 class DownloadProvider extends ChangeNotifier {
-  final Dio _dio = Dio(BaseOptions(
+  // NO se usa un Dio compartido – cada descarga crea y descarta su propia instancia
+  // para evitar que YouTube acumule throttling en la misma sesión TCP.
+  Dio _newDio() => Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 20),
-    receiveTimeout: const Duration(seconds: 120),
+    receiveTimeout: const Duration(seconds: 180),
     sendTimeout: const Duration(seconds: 20),
+    // No mantener conexiones vivas entre descargas
+    validateStatus: (status) => status != null && status < 500,
   ));
 
   // Lista de User-Agents para evitar bloqueos por repetición
@@ -162,9 +166,10 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   Future<int> getStreamSize(String url) async {
+    final dio = _newDio();
     try {
       final headers = _getRotatedHeaders();
-      final res = await _dio.get(url, options: Options(
+      final res = await dio.get(url, options: Options(
         headers: {...headers, 'Range': 'bytes=0-0'},
         followRedirects: true,
       ));
@@ -172,6 +177,8 @@ class DownloadProvider extends ChangeNotifier {
              int.tryParse(res.headers.value('content-length') ?? '') ?? 0;
     } catch (_) {
       return 0;
+    } finally {
+      dio.close();
     }
   }
 
@@ -320,10 +327,12 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   Future<void> _acceleratedDownload(String id, String url, String path, CancelToken token) async {
+    // Instancia Dio NUEVA y descartable para esta descarga
+    final dio = _newDio();
     final headers = _getRotatedHeaders();
     try {
-      // 1. Obtener Metadatos y Tamaño
-      final headRes = await _dio.get(url, options: Options(
+      // 1. Obtener Metadatos y Tamaño con la instancia fresca
+      final headRes = await dio.get(url, options: Options(
         headers: {...headers, 'Range': 'bytes=0-0'},
         followRedirects: true,
       ));
@@ -331,9 +340,9 @@ class DownloadProvider extends ChangeNotifier {
       final total = int.tryParse(headRes.headers.value('content-range')?.split('/').last ?? '') ?? 
                     int.tryParse(headRes.headers.value('content-length') ?? '') ?? 0;
 
-      // Si no podemos determinar tamaño o es pequeño (< 3MB), descarga estándar
+      // Si no podemos determinar tamaño o es pequeño, descarga estándar con conexión limpia
       if (total < 3 * 1024 * 1024) {
-        await _dio.download(url, path, cancelToken: token, options: Options(headers: headers),
+        await dio.download(url, path, cancelToken: token, options: Options(headers: headers),
           onReceiveProgress: (r, t) {
             if (t > 0) { _progress[id] = r / t; notifyListeners(); }
           }
@@ -341,7 +350,7 @@ class DownloadProvider extends ChangeNotifier {
         return;
       }
 
-      // 2. Fragmentación inteligente con headers variados
+      // 2. Fragmentación: cada chunk usa su propio Dio descartable
       const int chunks = _numChunks;
       final int chunkSize = (total / chunks).ceil();
       final List<String> partPaths = List.generate(chunks, (i) => '$path.part$i');
@@ -351,8 +360,6 @@ class DownloadProvider extends ChangeNotifier {
       for (int i = 0; i < chunks; i++) {
         final start = i * chunkSize;
         final end = (i == chunks - 1) ? total - 1 : (i + 1) * chunkSize - 1;
-        
-        // Cada fragmento usa el pool de headers pero mantiene coherencia
         futures.add(_downloadChunk(url, partPaths[i], start, end, headers, token, (received) {
           progressList[i] = received;
           final sum = progressList.reduce((a, b) => a + b);
@@ -363,7 +370,7 @@ class DownloadProvider extends ChangeNotifier {
 
       await Future.wait(futures);
 
-      // 3. Ensamblaje atómico de los fragmentos
+      // 3. Ensamblaje de fragmentos
       final outputFile = File(path);
       final sink = outputFile.openWrite();
       for (final p in partPaths) {
@@ -374,36 +381,52 @@ class DownloadProvider extends ChangeNotifier {
       await sink.close();
       
     } catch (e) {
-      // Limpieza preventiva de todos los fragmentos (.part0, .part1, ...)
       for (int i = 0; i < _numChunks; i++) {
         final f = File('$path.part$i');
         if (await f.exists()) await f.delete();
       }
       rethrow;
+    } finally {
+      // ¡Siempre liberar el cliente para que no queden conexiones abiertas!
+      dio.close(force: true);
     }
   }
 
-  /// Descarga un fragmento específico con lógica de reintento para máxima fiabilidad
   Future<void> _downloadChunk(String url, String path, int start, int end, Map<String, String> headers, CancelToken token, Function(int) onProgress) async {
-    int retryCount = 0;
-    while (retryCount < 3) {
+    // Cada chunk también usa su propio Dio descartable
+    final dio = _newDio();
+    try {
+      await dio.download(
+        url,
+        path,
+        cancelToken: token,
+        options: Options(
+          headers: {...headers, 'Range': 'bytes=$start-$end'},
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+        onReceiveProgress: (received, _) => onProgress(received),
+      );
+    } catch (e) {
+      if (e is DioException && e.type == DioExceptionType.cancel) rethrow;
+      // Reintento con nueva conexión limpia si hay error de red
+      final retryDio = _newDio();
       try {
-        await _dio.download(
+        await Future.delayed(const Duration(seconds: 2));
+        await retryDio.download(
           url,
           path,
           cancelToken: token,
           options: Options(
-            headers: {...headers, 'Range': 'bytes=$start-$end'},
-            receiveTimeout: const Duration(seconds: 45),
+            headers: {..._getRotatedHeaders(), 'Range': 'bytes=$start-$end'},
+            receiveTimeout: const Duration(seconds: 60),
           ),
           onReceiveProgress: (received, _) => onProgress(received),
         );
-        return; // Éxito
-      } catch (e) {
-        retryCount++;
-        if (retryCount >= 3 || (e is DioException && e.type == DioExceptionType.cancel)) rethrow;
-        await Future.delayed(Duration(seconds: 1 * retryCount));
+      } finally {
+        retryDio.close(force: true);
       }
+    } finally {
+      dio.close(force: true);
     }
   }
 
