@@ -84,10 +84,7 @@ class DownloadService {
     }
   }
 
-  // Re-diseñamos _downloadAndWrite para ser estático y ejecutable en Isolate
   Future<void> _downloadAndWrite(_DownloadTask task) async {
-    // Para cumplir con la instrucción de progreso y velocidad:
-    // Extraemos la información del stream en el isolate principal y pasamos la URL.
     try {
       final manifest = await _yt.videos.streamsClient.getManifest(
         task.id,
@@ -99,9 +96,15 @@ class DownloadService {
       final url = streamInfo.url.toString();
       final totalSize = streamInfo.size.totalBytes;
 
-      // Puerto para recibir progreso del Isolate
       final receivePort = ReceivePort();
       
+      // Listener de progreso ANTES de lanzar el Isolate
+      receivePort.listen((message) {
+        if (message is int) {
+          task.onProgress(message, totalSize);
+        }
+      });
+
       final isolateResult = await Isolate.run(() => _executeIsolatedDownload(
         url: url,
         savePath: task.savePath,
@@ -109,16 +112,11 @@ class DownloadService {
         progressPort: receivePort.sendPort,
       ));
 
-      receivePort.listen((message) {
-        if (message is int) {
-          task.onProgress(message, totalSize);
-        }
-      });
-
       _taskRegistry.remove(task.id);
       task.completer.complete(isolateResult);
       receivePort.close();
     } catch (e) {
+      debugPrint('[DownloadService] _downloadAndWrite Error: $e');
       _taskRegistry.remove(task.id);
       task.completer.complete(false);
     }
