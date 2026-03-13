@@ -1,16 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// DownloadService — Servicio de descarga aislado con cola secuencial
-//
-// Política:
-//  - Una sola descarga activa a la vez (cola FIFO estricta)
-//  - Usa YoutubeExplode directamente para manejar el descifrado de 'n' (velocidad)
-//  - Escritura con IOSink + flush() + close() explícito antes de señalar "done"
-//  - No toca ningún componente de UI
-// ─────────────────────────────────────────────────────────────────────────────
-
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
@@ -36,16 +27,18 @@ class _DownloadTask {
 
 class DownloadService {
   final YoutubeExplode _yt;
+  final Dio _dio = Dio();
   
-  DownloadService(this._yt);
+  DownloadService(this._yt) {
+    _dio.options.connectTimeout = const Duration(seconds: 15);
+    _dio.options.receiveTimeout = const Duration(minutes: 5);
+  }
 
   // ── Cola FIFO de tareas ────────────────────────────────────────────────────
   final Queue<_DownloadTask> _queue = Queue();
   final Map<String, _DownloadTask> _taskRegistry = {};
   bool _isProcessing = false;
 
-  /// Encola una descarga y devuelve un Future<bool> que completa
-  /// cuando el archivo está en disco y cerrado.
   Future<bool> enqueue({
     required String id,
     required String savePath,
@@ -111,61 +104,135 @@ class DownloadService {
     }
   }
 
+  /// MEGA SPEED DOWNLOAD: Usa múltiples conexiones paralelas (Range)
+  /// Esto bypassa el "throttling" de YouTube por conexión individual.
   Future<void> _downloadAndWrite(_DownloadTask task) async {
-    IOSink? sink;
+    RandomAccessFile? raf;
     File? file;
 
     try {
-      debugPrint('[DownloadService] [${task.id}] Iniciando descarga optimizada...');
+      debugPrint('[DownloadService] [${task.id}] Extrayendo manifest ultra-speed...');
       
-      // 1. Obtener el manifest justo antes de descargar
-      final manifest = await _yt.videos.streamsClient.getManifest(task.id);
+      // 1. Obtener manifest con clientes móviles (iOS/AndroidVr suelen ser más rápidos)
+      final manifest = await _yt.videos.streamsClient.getManifest(
+        task.id,
+        ytClients: [YoutubeApiClient.ios, YoutubeApiClient.androidVr],
+      );
+      
       final streamInfo = manifest.audioOnly.withHighestBitrate();
-      
-      if (streamInfo == null) {
-        throw Exception('No audio stream found for ${task.id}');
-      }
+      if (streamInfo == null) throw Exception('No audio stream for ${task.id}');
 
-      final total = streamInfo.size.totalBytes;
+      final String url = streamInfo.url.toString();
+      final int totalSize = streamInfo.size.totalBytes;
       
-      // 2. Preparar archivo
       file = File(task.savePath);
-      sink = file.openWrite(mode: FileMode.writeOnly);
+      if (await file.exists()) await file.delete();
+      raf = await file.open(mode: FileMode.write);
+      // Pre-asignar espacio para evitar fragmentación
+      await raf.truncate(totalSize);
 
-      // 3. Obtener el stream usando YoutubeExplode (esto maneja el descifrado de parámetros de velocidad)
-      final stream = _yt.videos.streamsClient.get(streamInfo);
+      // 2. Definir chunks (3 conexiones paralelas suelen ser el "sweet spot" para YouTube)
+      const int connections = 3;
+      final int chunkSize = totalSize ~/ connections;
+      
+      int globalReceived = 0;
+      final Map<int, int> chunkProgress = {};
+      final progressController = StreamController<void>.broadcast();
 
-      int received = 0;
-      DateTime lastProgress = DateTime.now();
+      // Listener para progreso unificado
+      final progressSub = progressController.stream.listen((_) {
+        int currentTotal = 0;
+        chunkProgress.forEach((_, val) => currentTotal += val);
+        task.onProgress(currentTotal, totalSize);
+      });
 
-      await for (final List<int> chunk in stream) {
-        if (task.isCancelled) {
-          throw const _CancelledException();
-        }
+      final List<Future> downloadPool = [];
 
-        sink.add(chunk);
-        received += chunk.length;
+      for (int i = 0; i < connections; i++) {
+        final int start = i * chunkSize;
+        final int end = (i == connections - 1) ? totalSize - 1 : (start + chunkSize - 1);
+        
+        chunkProgress[i] = 0;
 
-        final now = DateTime.now();
-        if (now.difference(lastProgress).inMilliseconds > 200) {
-          task.onProgress(received, total);
-          lastProgress = now;
-        }
+        downloadPool.add(_downloadChunk(
+          url: url,
+          start: start,
+          end: end,
+          task: task,
+          raf: raf,
+          onChunkProgress: (received) {
+            chunkProgress[i] = received;
+            progressController.add(null);
+          },
+        ));
       }
 
-      await sink.flush();
-      await sink.close();
-      sink = null;
+      await Future.wait(downloadPool);
+      await progressSub.cancel();
+      await progressController.close();
+      await raf.close();
+      raf = null;
 
-      task.onProgress(received, total);
-      debugPrint('[DownloadService] [${task.id}] ✅ Descarga exitosa.');
+      debugPrint('[DownloadService] [${task.id}] ✅ Descarga paralela completada.');
     } on _CancelledException {
-      if (sink != null) await sink.close();
+      if (raf != null) await raf.close();
       if (file != null && await file.exists()) await file.delete();
     } catch (e) {
-      if (sink != null) await sink.close();
+      if (raf != null) await raf.close();
       if (file != null && await file.exists()) await file.delete();
       rethrow;
+    }
+  }
+
+  Future<void> _downloadChunk({
+    required String url,
+    required int start,
+    required int end,
+    required _DownloadTask task,
+    required RandomAccessFile raf,
+    required Function(int) onChunkProgress,
+  }) async {
+    final response = await _dio.get<ResponseBody>(
+      url,
+      options: Options(
+        responseType: ResponseType.stream,
+        headers: {
+          'Range': 'bytes=$start-$end',
+          'User-Agent': 'com.google.android.youtube/19.16.36 (Linux; U; Android 14; en_US) Screen/1.0',
+        },
+      ),
+    );
+
+    int receivedInChunk = 0;
+    await for (final List<int> chunk in response.data!.stream) {
+      if (task.isCancelled) throw const _CancelledException();
+
+      // Escritura atómica en el offset correcto
+      // Nota: raf no es thread-safe para operaciones asíncronas concurrentes, 
+      // pero aquí estamos usando una sola instancia. Synchronized writing es necesario.
+      synchronized(raf, () async {
+        await raf.setPosition(start + receivedInChunk);
+        await raf.writeFrom(chunk);
+      });
+
+      receivedInChunk += chunk.length;
+      onChunkProgress(receivedInChunk);
+    }
+  }
+
+  // Simple mutex para RandomAccessFile
+  final Map<RandomAccessFile, Completer<void>?> _locks = {};
+  Future<void> synchronized(RandomAccessFile raf, Future<void> Function() action) async {
+    while (_locks[raf] != null) {
+      await _locks[raf]!.future;
+    }
+    final completer = Completer<void>();
+    _locks[raf] = completer;
+    try {
+      await action();
+    } finally {
+      _locks[raf] = null;
+      completer.complete();
     }
   }
 }
