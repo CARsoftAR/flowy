@@ -38,7 +38,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
         child: Container(
           width: size.width * 0.9,
           child: Image.asset(
-            'assets/fondo_clean.png',
+            'assets/fondo_final.png',
             fit: BoxFit.contain,
           ),
         ).animate()
