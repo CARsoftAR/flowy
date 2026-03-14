@@ -440,7 +440,7 @@ class _PlayerPageState extends State<PlayerPage>
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
-                              value: progress,
+                              value: (progress == 0.0) ? null : progress,
                               strokeWidth: 2,
                               color: player.dominantColor,
                             ),

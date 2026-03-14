@@ -84,7 +84,20 @@ class DownloadService {
 
   Future<void> _downloadAndWrite(_DownloadTask task) async {
     try {
-      final manifest = await _yt.videos.streamsClient.getManifest(task.id);
+      StreamManifest? manifest;
+      try {
+        manifest = await _yt.videos.streamsClient.getManifest(
+          task.id,
+          ytClients: [YoutubeApiClient.ios, YoutubeApiClient.androidVr],
+        );
+      } catch (e) {
+        debugPrint('[DownloadService] iOS/VR fallback failed: $e, trying Android');
+        manifest = await _yt.videos.streamsClient.getManifest(
+          task.id,
+          ytClients: [YoutubeApiClient.android],
+        );
+      }
+      
       final streamInfo = manifest.audioOnly.withHighestBitrate();
       if (streamInfo == null) throw Exception('No stream found');
 
@@ -124,6 +137,8 @@ class DownloadService {
               url,
               options: Options(
                 responseType: ResponseType.stream,
+                receiveTimeout: const Duration(seconds: 15),
+                sendTimeout: const Duration(seconds: 15),
                 headers: {
                   'Range': 'bytes=$downloaded-$end',
                   // Usamos un user-agent genérico para no levantar sospechas

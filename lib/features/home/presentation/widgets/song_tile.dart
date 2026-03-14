@@ -190,7 +190,7 @@ class SongTile extends StatelessWidget {
                             width: 24,
                             height: 24,
                             child: CircularProgressIndicator(
-                              value: progress,
+                              value: (progress == 0.0) ? null : progress,
                               strokeWidth: 2.5,
                               color: scheme.primary,
                             ),
