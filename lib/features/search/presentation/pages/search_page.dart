@@ -460,21 +460,19 @@ class _SearchPageState extends State<SearchPage> {
               }
 
               final interest = allInterests[index];
-              return GestureDetector(
+              return InterestCard(
+                id: interest.id,
+                index: index,
+                title: interest.title,
+                icon: interest.icon,
+                gradientColors: interest.gradientColors,
+                onTap: () {
+                  _controller.text = interest.title;
+                  _search(interest.title, fromInterest: interest);
+                },
                 onLongPress: interest.id.startsWith('custom_') 
                   ? () => _showDeleteCustomInterestDialog(context, interest, historyProvider)
                   : null,
-                child: InterestCard(
-                  id: interest.id,
-                  index: index,
-                  title: interest.title,
-                  icon: interest.icon,
-                  gradientColors: interest.gradientColors,
-                  onTap: () {
-                    _controller.text = interest.title;
-                    _search(interest.title, fromInterest: interest);
-                  },
-                ),
               );
             },
           ),

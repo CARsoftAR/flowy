@@ -9,6 +9,7 @@ class InterestCard extends StatefulWidget {
   final IconData icon;
   final List<Color> gradientColors;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final int index;
 
   const InterestCard({
@@ -18,6 +19,7 @@ class InterestCard extends StatefulWidget {
     required this.icon,
     required this.gradientColors,
     required this.onTap,
+    this.onLongPress,
     required this.index,
   });
 
@@ -48,6 +50,12 @@ class _InterestCardState extends State<InterestCard> with SingleTickerProviderSt
       onTapUp: _onTapUp,
       onTapCancel: _onTapCancel,
       onTap: widget.onTap,
+      onLongPress: () {
+        if (widget.onLongPress != null) {
+          HapticFeedback.heavyImpact();
+          widget.onLongPress!();
+        }
+      },
       child: AnimatedScale(
         scale: _scale,
         duration: const Duration(milliseconds: 100),

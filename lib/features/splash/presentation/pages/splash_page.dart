@@ -35,12 +35,29 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Center(
-        child: Container(
-          width: size.width * 0.9,
-          child: Image.asset(
-            'assets/fondo_final.png',
-            fit: BoxFit.contain,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: size.width * 0.9,
+              child: Image.asset(
+                'assets/fondo_final.png',
+                fit: BoxFit.contain,
+              ),
+            ),
+            Transform.translate(
+              offset: const Offset(0, -20), // Si queremos que se superponga o esté muy cerca del Flowy
+              child: Text(
+                'v1.0.0',
+                style: GoogleFonts.nunito(
+                  color: const Color(0xFFE50914).withOpacity(0.9), // Rojo similar al de Flowy o gris: Colors.white54
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2.5,
+                ),
+              ),
+            ),
+          ],
         ).animate()
           .fadeIn(duration: 800.ms)
           .scale(
