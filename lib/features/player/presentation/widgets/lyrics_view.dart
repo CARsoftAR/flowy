@@ -10,11 +10,13 @@ import '../../../../core/widgets/skeleton_shimmer.dart';
 class LyricsView extends StatefulWidget {
   final SongEntity song;
   final Duration position;
+  final VoidCallback onTap;
 
   const LyricsView({
     super.key,
     required this.song,
     required this.position,
+    required this.onTap,
   });
 
   @override
@@ -142,48 +144,47 @@ class _LyricsViewState extends State<LyricsView> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(32),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-          child: ShaderMask(
-            shaderCallback: (Rect bounds) {
-              return LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.white,
-                  Colors.white,
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.15, 0.85, 1.0],
-              ).createShader(bounds);
-            },
-            blendMode: BlendMode.dstIn,
-            child: ScrollablePositionedList.builder(
-              itemCount: lyrics.lines.length,
-              itemScrollController: _itemScrollController,
-              itemPositionsListener: _itemPositionsListener,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 80),
-              itemBuilder: (context, index) {
-                final isSynced = lyrics.isSynced;
-                final isCurrent = index == _currentLineIndex;
-                final isActive = isSynced ? isCurrent : true;
-                
-                final double fontSize = isSynced ? (isActive ? 34 : 22) : 20;
-                final FontWeight fontWeight = isSynced ? (isActive ? FontWeight.w900 : FontWeight.w600) : FontWeight.w500;
-                final Color color = isActive ? Colors.white : Colors.white.withOpacity(0.2);
-                final double shadowBlur = isSynced ? (isActive ? 16 : 0) : 4;
-                final double scaleEnd = isSynced ? 1.02 : 1.0;
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: ShaderMask(
+              shaderCallback: (Rect bounds) {
+                return LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: const [
+                    Colors.transparent,
+                    Colors.white,
+                    Colors.white,
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.3, 0.7, 1.0],
+                ).createShader(bounds);
+              },
+              blendMode: BlendMode.dstIn,
+              child: ScrollablePositionedList.builder(
+                itemCount: lyrics.lines.length,
+                itemScrollController: _itemScrollController,
+                itemPositionsListener: _itemPositionsListener,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 120),
+                itemBuilder: (context, index) {
+                  final isSynced = lyrics.isSynced;
+                  final isCurrent = index == _currentLineIndex;
+                  final isActive = isSynced ? isCurrent : true;
+                  
+                  final double fontSize = isSynced ? (isActive ? 34 : 22) : 20;
+                  final FontWeight fontWeight = isSynced ? (isActive ? FontWeight.w900 : FontWeight.w600) : FontWeight.w500;
+                  final Color color = isActive ? Colors.white : Colors.white.withOpacity(0.2);
+                  final double shadowBlur = isSynced ? (isActive ? 16 : 0) : 4;
+                  final double scaleEnd = isSynced ? 1.02 : 1.0;
 
-                final line = lyrics.lines[index];
+                  final line = lyrics.lines[index];
 
-                return GestureDetector(
-                  onTap: () {
-                    // Future: seek to this line
-                  },
-                  child: AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.fastOutSlowIn,
+                  return AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOutCubic,
                     style: TextStyle(
                       fontSize: fontSize,
                       fontWeight: fontWeight,
@@ -204,11 +205,12 @@ class _LyricsViewState extends State<LyricsView> {
                         ),
                       ),
                     ).animate(target: isActive ? 1 : 0)
-                     .scale(begin: const Offset(1, 1), end: Offset(scaleEnd, scaleEnd))
-                     .blur(begin: const Offset(3, 3), end: const Offset(0, 0)),
-                  ),
-                );
-              },
+                     .fadeIn(duration: 800.ms, curve: Curves.easeOutSine)
+                     .scale(begin: const Offset(1, 1), end: Offset(scaleEnd, scaleEnd), duration: 800.ms)
+                     .blur(begin: const Offset(5, 5), end: const Offset(0, 0), duration: 800.ms),
+                  );
+                },
+              ),
             ),
           ),
         ),

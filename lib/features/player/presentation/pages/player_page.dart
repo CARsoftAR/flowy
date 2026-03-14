@@ -91,9 +91,22 @@ class _PlayerPageState extends State<PlayerPage>
               // Artwork, Lyrics or Video toggle
               Expanded(
                 child: AnimatedSwitcher(
-                  duration: AppConstants.animationNormal,
+                  duration: const Duration(milliseconds: 700),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (Widget child, Animation<double> animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: child,
+                    );
+                  },
                   child: _showLyrics
-                      ? LyricsView(song: song, position: player.position)
+                      ? LyricsView(
+                          key: const ValueKey('lyrics'), 
+                          song: song, 
+                          position: player.position,
+                          onTap: () => setState(() => _showLyrics = false),
+                        )
                       : (song.isVideo 
                           ? _buildVideoSection(song, player)
                           : _buildArtworkSection(song, player.dominantColor)),
@@ -306,6 +319,7 @@ class _PlayerPageState extends State<PlayerPage>
 
   Widget _buildArtworkSection(SongEntity song, Color dominantColor) {
     return Padding(
+      key: const ValueKey('artwork'),
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
       child: AspectRatio(
         aspectRatio: 1,
