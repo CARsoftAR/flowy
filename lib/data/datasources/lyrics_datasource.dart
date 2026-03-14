@@ -17,7 +17,11 @@ class LyricsDataSource {
   LyricsDataSource({http.Client? client}) : _client = client ?? http.Client();
 
   String _cleanTitle(String title) {
-    return title.replaceAll(RegExp(r'\([^)]*\)|\[[^\]]*\]|(?i)official|(?i)video|(?i)audio|(?i)lyric|(?i)music'), '').trim().replaceAll(RegExp(r'\s+'), ' ');
+    return title
+        .replaceAll(RegExp(r'\([^)]*\)|\[[^\]]*\]'), '')
+        .replaceAll(RegExp(r'official|video|audio|lyrics?|music', caseSensitive: false), '')
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ');
   }
 
   Future<Either<Failure, LyricsEntity>> getLyrics(
