@@ -46,8 +46,7 @@ class LyricsDataSource {
   Future<LyricsEntity?> _fetchSyncedLyrics(
       String songId, String title, String artist) async {
     final uri = Uri.parse('$_lrclibBase/search').replace(queryParameters: {
-      'track_name': title,
-      'artist_name': artist,
+      'q': '$title $artist',
     });
 
     final response = await _client
@@ -69,8 +68,7 @@ class LyricsDataSource {
   Future<LyricsEntity?> _fetchPlainLyrics(
       String songId, String title, String artist) async {
     final uri = Uri.parse('$_lrclibBase/search').replace(queryParameters: {
-      'track_name': title,
-      'artist_name': artist,
+      'q': '$title $artist',
     });
 
     final response = await _client
