@@ -16,8 +16,13 @@ class LyricsDataSource {
 
   LyricsDataSource({http.Client? client}) : _client = client ?? http.Client();
 
+  String _cleanTitle(String title) {
+    return title.replaceAll(RegExp(r'\([^)]*\)|\[[^\]]*\]|(?i)official|(?i)video|(?i)audio|(?i)lyric|(?i)music'), '').trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
   Future<Either<Failure, LyricsEntity>> getLyrics(
-      String songId, String title, String artist) async {
+      String songId, String rawTitle, String artist) async {
+    final title = _cleanTitle(rawTitle);
     try {
       // Attempt 1: synced lyrics (LRC format)
       final syncedResult =
@@ -36,7 +41,7 @@ class LyricsDataSource {
 
   Future<LyricsEntity?> _fetchSyncedLyrics(
       String songId, String title, String artist) async {
-    final uri = Uri.parse('$_lrclibBase/get').replace(queryParameters: {
+    final uri = Uri.parse('$_lrclibBase/search').replace(queryParameters: {
       'track_name': title,
       'artist_name': artist,
     });
@@ -47,16 +52,19 @@ class LyricsDataSource {
 
     if (response.statusCode != 200) return null;
 
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    final lrc = json['syncedLyrics'] as String?;
-    if (lrc == null || lrc.isEmpty) return null;
-
-    return LyricsModel.fromLrc(songId, lrc).toEntity();
+    final List<dynamic> json = jsonDecode(response.body);
+    for (final item in json) {
+      final lrc = item['syncedLyrics'] as String?;
+      if (lrc != null && lrc.isNotEmpty) {
+        return LyricsModel.fromLrc(songId, lrc).toEntity();
+      }
+    }
+    return null;
   }
 
   Future<LyricsEntity?> _fetchPlainLyrics(
       String songId, String title, String artist) async {
-    final uri = Uri.parse('$_lrclibBase/get').replace(queryParameters: {
+    final uri = Uri.parse('$_lrclibBase/search').replace(queryParameters: {
       'track_name': title,
       'artist_name': artist,
     });
@@ -67,17 +75,19 @@ class LyricsDataSource {
 
     if (response.statusCode != 200) return null;
 
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    final plain = json['plainLyrics'] as String?;
-    if (plain == null || plain.isEmpty) return null;
-
-    final lines = plain.split('\n').map((line) {
-      return LyricLineEntity(
-        timestamp: Duration.zero,
-        text: line,
-      );
-    }).toList();
-
-    return LyricsEntity(songId: songId, lines: lines, isSynced: false);
+    final List<dynamic> json = jsonDecode(response.body);
+    for (final item in json) {
+      final plain = item['plainLyrics'] as String?;
+      if (plain != null && plain.isNotEmpty) {
+        final lines = plain.split('\n').map((line) {
+          return LyricLineEntity(
+            timestamp: Duration.zero,
+            text: line,
+          );
+        }).toList();
+        return LyricsEntity(songId: songId, lines: lines, isSynced: false);
+      }
+    }
+    return null;
   }
 }

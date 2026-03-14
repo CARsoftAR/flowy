@@ -1,4 +1,4 @@
-
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -126,49 +126,84 @@ class _LyricsViewState extends State<LyricsView> {
 
     final lyrics = _lyrics!;
 
-    return ScrollablePositionedList.builder(
-      itemCount: lyrics.lines.length,
-      itemScrollController: _itemScrollController,
-      itemPositionsListener: _itemPositionsListener,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 64),
-      itemBuilder: (context, index) {
-        final isActive = index == _currentLineIndex && lyrics.isSynced;
-        final line = lyrics.lines[index];
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: Colors.white.withOpacity(0.08), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 40,
+            spreadRadius: -5,
+          )
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(32),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+          child: ShaderMask(
+            shaderCallback: (Rect bounds) {
+              return LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.white,
+                  Colors.white,
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.15, 0.85, 1.0],
+              ).createShader(bounds);
+            },
+            blendMode: BlendMode.dstIn,
+            child: ScrollablePositionedList.builder(
+              itemCount: lyrics.lines.length,
+              itemScrollController: _itemScrollController,
+              itemPositionsListener: _itemPositionsListener,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 80),
+              itemBuilder: (context, index) {
+                final isActive = index == _currentLineIndex && lyrics.isSynced;
+                final line = lyrics.lines[index];
 
-        return GestureDetector(
-          onTap: () {
-            // Future: seek to this line
-          },
-          child: AnimatedDefaultTextStyle(
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOutCubic,
-            style: TextStyle(
-              fontSize: isActive ? 32 : 24,
-              fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
-              color: isActive ? Colors.white : Colors.white24,
-              height: 1.5,
-              fontFamily: 'Outfit',
-              shadows: isActive ? [
-                Shadow(
-                  color: Colors.white.withOpacity(0.5),
-                  blurRadius: 12,
-                )
-              ] : [],
+                return GestureDetector(
+                  onTap: () {
+                    // Future: seek to this line
+                  },
+                  child: AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 600),
+                    curve: Curves.fastOutSlowIn,
+                    style: TextStyle(
+                      fontSize: isActive ? 34 : 22,
+                      fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
+                      color: isActive ? Colors.white : Colors.white.withOpacity(0.2),
+                      height: 1.4,
+                      fontFamily: 'Outfit',
+                      letterSpacing: isActive ? 0.5 : 0,
+                      shadows: isActive ? [
+                        Shadow(color: Colors.white.withOpacity(0.6), blurRadius: 16)
+                      ] : [],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          line.text.isEmpty ? '•  •  •' : line.text,
+                        ),
+                      ),
+                    ).animate(target: isActive ? 1 : 0)
+                     .scale(begin: const Offset(1, 1), end: const Offset(1.02, 1.02))
+                     .blur(begin: const Offset(3, 3), end: const Offset(0, 0)),
+                  ),
+                );
+              },
             ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  line.text.isEmpty ? '•  •  •' : line.text,
-                ),
-              ),
-            ).animate(target: isActive ? 1 : 0)
-             .scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05))
-             .blur(begin: const Offset(2, 2), end: const Offset(0, 0)),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
