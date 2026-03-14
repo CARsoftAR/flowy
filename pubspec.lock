@@ -1028,18 +1028,18 @@ packages:
     dependency: "direct main"
     description:
       name: rive
-      sha256: "2551a44fa766a7ed3f52aa2b94feda6d18d00edc25dee5f66e72e9b365bb6d6c"
+      sha256: "2d7f0b0dd6c8368c3e5a47d0a38ee68306896920aa665b5bf59e7c589a6d35a2"
       url: "https://pub.dev"
     source: hosted
-    version: "0.13.20"
-  rive_common:
+    version: "0.14.4"
+  rive_native:
     dependency: transitive
     description:
-      name: rive_common
-      sha256: "2ba42f80d37a4efd0696fb715787c4785f8a13361e8aea9227c50f1e78cf763a"
+      name: rive_native
+      sha256: fad6aac822340fa14a2cbcdc8cd064da4b4c74d22a5f6c827a59538d67f200e4
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.15"
+    version: "0.1.4"
   rxdart:
     dependency: "direct main"
     description:
@@ -1197,6 +1197,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.5.6"
+  sqflite_common_ffi:
+    dependency: "direct main"
+    description:
+      name: sqflite_common_ffi
+      sha256: c59fcdc143839a77581f7a7c4de018e53682408903a0a0800b95ef2dc4033eff
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.0+2"
   sqflite_darwin:
     dependency: transitive
     description:
@@ -1213,6 +1221,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.0"
+  sqlite3:
+    dependency: transitive
+    description:
+      name: sqlite3
+      sha256: f8f8ba7f9454f2761d4b416e030c4528ebc45e9290798d848f4dc08890c42a7c
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.1.7"
+  sqlite3_flutter_libs:
+    dependency: "direct main"
+    description:
+      name: sqlite3_flutter_libs
+      sha256: eeb9e3a45207649076b808f8a5a74d68770d0b7f26ccef6d5f43106eee5375ad
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.42"
   stack_trace:
     dependency: transitive
     description:
