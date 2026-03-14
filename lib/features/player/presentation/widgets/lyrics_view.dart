@@ -165,7 +165,16 @@ class _LyricsViewState extends State<LyricsView> {
               itemPositionsListener: _itemPositionsListener,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 80),
               itemBuilder: (context, index) {
-                final isActive = index == _currentLineIndex && lyrics.isSynced;
+                final isSynced = lyrics.isSynced;
+                final isCurrent = index == _currentLineIndex;
+                final isActive = isSynced ? isCurrent : true;
+                
+                final double fontSize = isSynced ? (isActive ? 34 : 22) : 20;
+                final FontWeight fontWeight = isSynced ? (isActive ? FontWeight.w900 : FontWeight.w600) : FontWeight.w500;
+                final Color color = isActive ? Colors.white : Colors.white.withOpacity(0.2);
+                final double shadowBlur = isSynced ? (isActive ? 16 : 0) : 4;
+                final double scaleEnd = isSynced ? 1.02 : 1.0;
+
                 final line = lyrics.lines[index];
 
                 return GestureDetector(
@@ -176,26 +185,26 @@ class _LyricsViewState extends State<LyricsView> {
                     duration: const Duration(milliseconds: 600),
                     curve: Curves.fastOutSlowIn,
                     style: TextStyle(
-                      fontSize: isActive ? 34 : 22,
-                      fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
-                      color: isActive ? Colors.white : Colors.white.withOpacity(0.2),
-                      height: 1.4,
+                      fontSize: fontSize,
+                      fontWeight: fontWeight,
+                      color: color,
+                      height: isSynced ? 1.4 : 1.6,
                       fontFamily: 'Outfit',
-                      letterSpacing: isActive ? 0.5 : 0,
+                      letterSpacing: (isActive && isSynced) ? 0.5 : 0,
                       shadows: isActive ? [
-                        Shadow(color: Colors.white.withOpacity(0.6), blurRadius: 16)
+                        Shadow(color: Colors.white.withOpacity(0.5), blurRadius: shadowBlur)
                       ] : [],
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      padding: EdgeInsets.symmetric(vertical: isSynced ? 20 : 8),
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          line.text.isEmpty ? '•  •  •' : line.text,
+                          line.text.isEmpty ? (isSynced ? '•  •  •' : '') : line.text,
                         ),
                       ),
                     ).animate(target: isActive ? 1 : 0)
-                     .scale(begin: const Offset(1, 1), end: const Offset(1.02, 1.02))
+                     .scale(begin: const Offset(1, 1), end: Offset(scaleEnd, scaleEnd))
                      .blur(begin: const Offset(3, 3), end: const Offset(0, 0)),
                   ),
                 );
