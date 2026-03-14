@@ -345,6 +345,8 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
         final result = await _musicRepo.getStreamUrl(song.id, isVideo: song.isVideo).timeout(const Duration(seconds: 15));
         streamUrl = result.getOrElse(() => throw Exception('URL failed'));
       }
+      _urlCache[song.id] = streamUrl;
+      customEvent.add({'type': 'url_resolved', 'songId': song.id});
     } catch (e) {
       _log.e('[AudioEngine] URL Resolution Error: $e');
       _consecutiveFailures++;

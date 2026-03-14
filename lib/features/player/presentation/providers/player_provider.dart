@@ -125,6 +125,8 @@ class PlayerProvider extends ChangeNotifier {
         } else if (event['type'] == 'request_resume') {
           _resumeRequest = event;
           notifyListeners();
+        } else if (event['type'] == 'url_resolved') {
+          notifyListeners();
         }
       }
     });
