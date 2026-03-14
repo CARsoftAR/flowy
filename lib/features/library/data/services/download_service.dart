@@ -1,10 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
-import 'dart:isolate';
-import 'dart:typed_data';
 import 'package:dio/dio.dart';
-import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
@@ -29,6 +26,7 @@ class _DownloadTask {
 
 class DownloadService {
   final YoutubeExplode _yt;
+  final Dio _dio = Dio();
   
   DownloadService(this._yt);
 
@@ -86,143 +84,82 @@ class DownloadService {
 
   Future<void> _downloadAndWrite(_DownloadTask task) async {
     try {
-      final manifest = await _yt.videos.streamsClient.getManifest(
-        task.id,
-        ytClients: [YoutubeApiClient.androidVr, YoutubeApiClient.ios],
-      );
+      final manifest = await _yt.videos.streamsClient.getManifest(task.id);
       final streamInfo = manifest.audioOnly.withHighestBitrate();
-      if (streamInfo == null) throw Exception('No stream');
+      if (streamInfo == null) throw Exception('No stream found');
 
       final url = streamInfo.url.toString();
       final totalSize = streamInfo.size.totalBytes;
 
-      final receivePort = ReceivePort();
+      final file = File(task.savePath);
+      if (await file.exists()) await file.delete();
       
-      // Listener de progreso ANTES de lanzar el Isolate
-      receivePort.listen((message) {
-        if (message is int) {
-          task.onProgress(message, totalSize);
+      final raf = await file.open(mode: FileMode.write);
+      
+      // ESTRATEGIA: Descarga Secuencial por Bloques (Chunking).
+      // YouTube estrangula (throttle) la velocidad después de transmitir ~2MB de datos continuos.
+      // Solución: Cerramos y abrimos una nueva petición cada 3MB. Esto "engaña"
+      // al CDN haciéndole creer que es un cliente buscando por el archivo y mantiene
+      // la velocidad de conexión al máximo siempre.
+      final int chunkSize = 3 * 1024 * 1024; // 3 MB
+      int downloaded = 0;
+
+      while (downloaded < totalSize) {
+        if (task.isCancelled) {
+          await raf.close();
+          throw Exception('Cancelled');
         }
-      });
 
-      final isolateResult = await Isolate.run(() => _executeIsolatedDownload(
-        url: url,
-        savePath: task.savePath,
-        totalSize: totalSize,
-        progressPort: receivePort.sendPort,
-      ));
+        int end = downloaded + chunkSize - 1;
+        if (end >= totalSize) {
+          end = totalSize - 1;
+        }
 
+        bool success = false;
+        int retries = 0;
+        
+        while (!success && retries < 3) {
+          try {
+            final response = await _dio.get<ResponseBody>(
+              url,
+              options: Options(
+                responseType: ResponseType.stream,
+                headers: {
+                  'Range': 'bytes=$downloaded-$end',
+                  // Usamos un user-agent genérico para no levantar sospechas
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  'Referer': 'https://www.youtube.com/',
+                },
+              ),
+            );
+
+            await for (final chunk in response.data!.stream) {
+              if (task.isCancelled) throw Exception('Cancelled');
+              raf.writeFromSync(chunk);
+              downloaded += chunk.length;
+              task.onProgress(downloaded, totalSize);
+            }
+            success = true;
+          } catch (e) {
+            retries++;
+            debugPrint('[DownloadService] Chunk error at $downloaded, retrying ($retries/3): $e');
+            await Future.delayed(Duration(seconds: retries));
+          } // Try block
+        } // Retry loop
+        
+        if (!success) {
+          await raf.close();
+          throw Exception('Failed to download chunk after 3 retries');
+        }
+      } // Chunk loop
+
+      await raf.close();
       _taskRegistry.remove(task.id);
-      task.completer.complete(isolateResult);
-      receivePort.close();
+      task.completer.complete(true);
     } catch (e) {
       debugPrint('[DownloadService] _downloadAndWrite Error: $e');
       _taskRegistry.remove(task.id);
       task.completer.complete(false);
     }
   }
-
-  // REESCRITURA TOTAL: Motor de descarga optimizado para HI-FI
-  static Future<bool> _executeIsolatedDownload({
-    required String url,
-    required String savePath,
-    required int totalSize,
-    required SendPort progressPort,
-  }) async {
-    final dio = Dio();
-    // Configurar cliente persistente (Keep-Alive)
-    (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
-      final client = HttpClient();
-      client.idleTimeout = const Duration(seconds: 30);
-      client.connectionTimeout = const Duration(seconds: 15);
-      return client;
-    };
-
-    RandomAccessFile? raf;
-    try {
-      final file = File(savePath);
-      if (await file.exists()) await file.delete();
-      raf = await file.open(mode: FileMode.write);
-      await raf.truncate(totalSize);
-
-      const int connections = 8;
-      final int chunkSize = totalSize ~/ connections;
-      final List<Future> pool = [];
-      final Map<int, int> progressMap = {};
-      
-      int lastReportedProgress = 0;
-
-      for (int i = 0; i < connections; i++) {
-        final start = i * chunkSize;
-        final end = (i == connections - 1) ? totalSize - 1 : (start + chunkSize - 1);
-        progressMap[i] = 0;
-
-        pool.add(_downloadChunkIsolated(
-          dio: dio,
-          url: url,
-          start: start,
-          end: end,
-          raf: raf,
-          onProgress: (received) {
-            progressMap[i] = received;
-            int totalReceived = 0;
-            progressMap.forEach((_, v) => totalReceived += v);
-            
-            // Throttle progress updates to avoid saturation
-            if (totalReceived - lastReportedProgress > 65536) { 
-              progressPort.send(totalReceived);
-              lastReportedProgress = totalReceived;
-            }
-          },
-        ));
-      }
-
-      await Future.wait(pool);
-      progressPort.send(totalSize);
-      await raf.close();
-      dio.close();
-      return true;
-    } catch (e) {
-      if (raf != null) await raf.close();
-      return false;
-    }
-  }
-
-  static Future<void> _downloadChunkIsolated({
-    required Dio dio,
-    required String url,
-    required int start,
-    required int end,
-    required RandomAccessFile raf,
-    required Function(int) onProgress,
-  }) async {
-    final response = await dio.get<ResponseBody>(
-      url,
-      options: Options(
-        responseType: ResponseType.stream,
-        headers: {
-          'Range': 'bytes=$start-$end',
-          'User-Agent': 'com.google.android.youtube/19.16.36 (Linux; U; Android 14; en_US) Screen/1.0',
-          'Referer': 'https://www.youtube.com/',
-          // INSTRUCCIÓN: Accept-Encoding identity para evitar overhead de descompresión
-          'Accept-Encoding': 'identity', 
-          'Accept': '*/*',
-        },
-      ),
-    );
-
-    int received = 0;
-    // INSTRUCCIÓN: Buffer de 64KB (65536 bytes)
-    await for (final List<int> chunk in response.data!.stream) {
-      // La escritura síncrona en offset es segura dentro del mismo Isolate
-      // ya que no hay concurrencia de hilos reales en el modelo de Dart/Isolate
-      // para una sola instancia de RandomAccessFile operando sincrónicamente.
-      raf.setPositionSync(start + received);
-      raf.writeFromSync(chunk);
-
-      received += chunk.length;
-      onProgress(received);
-    }
-  }
-
 }
