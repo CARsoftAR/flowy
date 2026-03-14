@@ -9,6 +9,7 @@ import 'package:flowy/features/library/presentation/providers/library_provider.d
 import 'package:flowy/features/library/presentation/providers/download_provider.dart';
 import 'package:flowy/features/home/presentation/widgets/song_tile.dart';
 import 'package:flowy/features/home/presentation/widgets/section_header.dart';
+import 'package:flowy/features/library/presentation/widgets/spotify_import_dialog.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LibraryPage — User's saved songs, playlists and history
@@ -102,12 +103,23 @@ class _LibraryPageState extends State<LibraryPage> {
                 floating: true,
                 backgroundColor: Colors.transparent,
                 actions: [
-                  if (_viewIndex == 0)
+                  if (_viewIndex == 0) ...[
+                    IconButton(
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => const SpotifyImportDialog(),
+                        );
+                      },
+                      icon: const Icon(Icons.token_rounded, color: Color(0xFF1DB954)),
+                      tooltip: 'Importar desde Spotify',
+                    ),
                     IconButton(
                       onPressed: () => _showCreatePlaylistDialog(context),
                       icon: const Icon(Icons.add_rounded),
                       tooltip: 'Nueva playlist',
                     ),
+                  ],
                   if (_viewIndex != 0)
                     IconButton(
                       onPressed: () => setState(() => _viewIndex = 0),
