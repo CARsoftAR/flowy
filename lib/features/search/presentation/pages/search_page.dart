@@ -399,8 +399,33 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildDiscoveryView(ThemeData theme, ColorScheme scheme) {
-    final interests = CategoryData.getInterestsForCategory(_selectedCategory);
-    final history = context.watch<SearchHistoryProvider>().history;
+    final predefinedInterests = CategoryData.getInterestsForCategory(_selectedCategory);
+    final historyProvider = context.watch<SearchHistoryProvider>();
+    
+    final customInterestsRaw = historyProvider.customInterests
+        .where((c) => c['category'] == _selectedCategory.name)
+        .toList();
+
+    final customInterests = customInterestsRaw.map((rawData) {
+      final title = rawData['title'] ?? 'Custom';
+      final hash = title.hashCode.abs();
+      // Generate pleasing random UI colors based on string hash
+      final hue1 = (hash % 360).toDouble();
+      final hue2 = ((hash ~/ 360) % 360).toDouble();
+      final c1 = HSLColor.fromAHSL(1.0, hue1, 0.7, 0.5).toColor();
+      final c2 = HSLColor.fromAHSL(1.0, hue2, 0.7, 0.4).toColor();
+      
+      return InterestEntity(
+        id: rawData['id'] ?? '',
+        title: title,
+        icon: Icons.bookmark_rounded,
+        gradientColors: [c1, c2],
+        category: _selectedCategory,
+        searchQuerySuffix: title, // Appended to searches
+      );
+    }).toList();
+
+    final allInterests = [...predefinedInterests, ...customInterests];
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -408,7 +433,7 @@ class _SearchPageState extends State<SearchPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildRecentSection(history, theme, scheme),
+          _buildRecentSection(historyProvider.history, theme, scheme),
           
           Text(
             'Explorar por Interés', 
@@ -422,7 +447,7 @@ class _SearchPageState extends State<SearchPage> {
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: interests.length,
+            itemCount: allInterests.length + 1, // +1 for the "Add" card
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               crossAxisSpacing: 16,
@@ -430,19 +455,117 @@ class _SearchPageState extends State<SearchPage> {
               childAspectRatio: 1.1,
             ),
             itemBuilder: (context, index) {
-              final interest = interests[index];
-              return InterestCard(
-                id: interest.id,
-                index: index,
-                title: interest.title,
-                icon: interest.icon,
-                gradientColors: interest.gradientColors,
-                onTap: () {
-                  _controller.text = interest.title;
-                  _search(interest.title, fromInterest: interest);
-                },
+              if (index == allInterests.length) {
+                return _buildAddCustomCard(theme, scheme, historyProvider);
+              }
+
+              final interest = allInterests[index];
+              return GestureDetector(
+                onLongPress: interest.id.startsWith('custom_') 
+                  ? () => _showDeleteCustomInterestDialog(context, interest, historyProvider)
+                  : null,
+                child: InterestCard(
+                  id: interest.id,
+                  index: index,
+                  title: interest.title,
+                  icon: interest.icon,
+                  gradientColors: interest.gradientColors,
+                  onTap: () {
+                    _controller.text = interest.title;
+                    _search(interest.title, fromInterest: interest);
+                  },
+                ),
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddCustomCard(ThemeData theme, ColorScheme scheme, SearchHistoryProvider provider) {
+    return GestureDetector(
+      onTap: () => _showAddCustomInterestDialog(context, provider),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: scheme.surfaceContainerHighest.withOpacity(0.3),
+          border: Border.all(color: scheme.outline.withOpacity(0.2), width: 2),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: scheme.surfaceContainerHighest,
+                ),
+                child: Icon(Icons.add_rounded, color: scheme.onSurface, size: 28),
+              ),
+              const SizedBox(height: 12),
+              Text('Nueva Tarjeta', style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAddCustomInterestDialog(BuildContext context, SearchHistoryProvider provider) async {
+    final controller = TextEditingController();
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: const BorderSide(color: Colors.white10)),
+        title: const Text('Crear Tarjeta Personalizada', style: TextStyle(fontWeight: FontWeight.w900)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: 'Ej: Música Romántica Clásica',
+            hintStyle: const TextStyle(color: Colors.white30),
+            filled: true,
+            fillColor: Colors.black26,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.white54))),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                provider.addCustomInterest(controller.text, _selectedCategory.name);
+                Navigator.pop(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            child: const Text('Crear', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showDeleteCustomInterestDialog(BuildContext context, InterestEntity interest, SearchHistoryProvider provider) async {
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: const BorderSide(color: Colors.white10)),
+        title: const Text('Eliminar Tarjeta', style: TextStyle(fontWeight: FontWeight.w900)),
+        content: Text('¿Deseas eliminar la tarjeta "${interest.title}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.white54))),
+          ElevatedButton(
+            onPressed: () {
+              provider.removeCustomInterest(interest.id);
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent.withOpacity(0.8), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            child: const Text('Eliminar', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
