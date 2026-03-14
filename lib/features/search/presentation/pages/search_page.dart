@@ -354,6 +354,17 @@ class _SearchPageState extends State<SearchPage> {
                           ],
                         ),
                       ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Colors.white),
+                        onPressed: () {
+                          _controller.clear();
+                          setState(() {
+                            _suggestions = [];
+                            _results = null;
+                            _activeInterest = null;
+                          });
+                        },
+                      ),
                     ],
                   ),
                 ),
