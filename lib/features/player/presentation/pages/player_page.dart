@@ -1,6 +1,8 @@
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../widgets/video_player_widget.dart';
+import '../widgets/realtime_visualizer.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/ambient_background.dart';
+import '../../../../core/widgets/flowy_marquee.dart';
 import '../../../../domain/entities/entities.dart';
 import 'package:flowy/features/player/presentation/providers/player_provider.dart' as pp;
 import 'package:flowy/features/library/presentation/providers/download_provider.dart';
@@ -19,13 +22,8 @@ import '../widgets/equalizer_sheet.dart';
 import '../widgets/queue_sheet.dart';
 import '../widgets/sleep_timer_sheet.dart';
 import '../widgets/playback_speed_sheet.dart';
+import '../widgets/volume_sheet.dart';
 import '../widgets/chapter_sheet.dart';
-import '../providers/audio_effects_provider.dart';
-import '../providers/sleep_timer_provider.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PlayerPage — Full-screen immersive player
-// ─────────────────────────────────────────────────────────────────────────────
 
 class PlayerPage extends StatefulWidget {
   const PlayerPage({super.key});
@@ -34,8 +32,7 @@ class PlayerPage extends StatefulWidget {
   State<PlayerPage> createState() => _PlayerPageState();
 }
 
-class _PlayerPageState extends State<PlayerPage>
-    with TickerProviderStateMixin {
+class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
   late final AnimationController _artworkController;
   bool _showLyrics = false;
 
@@ -67,180 +64,53 @@ class _PlayerPageState extends State<PlayerPage>
             imageUrl: song.bestThumbnail,
             dominantColor: player.dominantColor,
             overlayOpacity: 0.2,
-            child: _buildBody(context, player, song),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  _buildTopBar(context),
+                  const SizedBox(height: 8),
+
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 700),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (Widget child, Animation<double> animation) {
+                        return FadeTransition(opacity: animation, child: child);
+                      },
+                      child: _showLyrics
+                          ? LyricsView(
+                              key: const ValueKey('lyrics'),
+                              song: song,
+                              position: player.position,
+                              onTap: () => setState(() => _showLyrics = false),
+                            )
+                          : _buildArtworkSection(song, player.dominantColor),
+                    ),
+                  ),
+
+                  _buildSongInfo(context, player, song),
+                  const SizedBox(height: 8),
+
+                  AudioWaveBar(
+                    isPlaying: player.isPlaying,
+                    color: player.dominantColor,
+                  ),
+                  const SizedBox(height: 8),
+
+                  _buildControls(context, player),
+                  const SizedBox(height: 24),
+
+                  _buildProgressBar(context, player),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
           ),
         );
       },
     );
   }
-
-  Widget _buildBody(
-      BuildContext context, pp.PlayerProvider player, SongEntity song) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Content is now wrapped by AmbientBackground in build()
-
-        // ── Actual content ─────────────────────────────────────────────
-        SafeArea(
-          child: Column(
-            children: [
-              _buildTopBar(context),
-              const SizedBox(height: 8),
-
-              // Artwork, Lyrics or Video toggle
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 700),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (Widget child, Animation<double> animation) {
-                    return FadeTransition(
-                      opacity: animation,
-                      child: child,
-                    );
-                  },
-                  child: _showLyrics
-                      ? LyricsView(
-                          key: const ValueKey('lyrics'), 
-                          song: song, 
-                          position: player.position,
-                          onTap: () => setState(() => _showLyrics = false),
-                        )
-                      : (song.isVideo 
-                          ? _buildVideoSection(song, player)
-                          : _buildArtworkSection(song, player.dominantColor)),
-                ),
-              ),
-
-              // Song info
-              _buildSongInfo(context, player, song),
-              const SizedBox(height: 8),
-
-              // Audio wave bars
-              if (!song.isVideo) ...[
-                AudioWaveBar(
-                  isPlaying: player.isPlaying,
-                  color: player.dominantColor,
-                ),
-                const SizedBox(height: 8),
-              ],
-
-              // Progress bar
-              if (!song.isVideo) ...[
-                _buildProgressBar(context, player),
-                const SizedBox(height: 16),
-              ],
-
-              // Controls
-              _buildControls(context, player),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
-
-        // ── Resume Prompt Layer ──────────────────────────────────────
-        if (player.resumeRequest != null)
-          _buildResumePrompt(context, player),
-      ],
-    );
-  }
-
-  Widget _buildResumePrompt(BuildContext context, pp.PlayerProvider player) {
-    final req = player.resumeRequest!;
-    final seconds = req['seconds'] as int? ?? 0;
-    final timeStr = _formatDuration(Duration(seconds: seconds));
-
-    return Positioned(
-      bottom: 120,
-      left: 20,
-      right: 20,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.85),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: player.dominantColor.withOpacity(0.3), width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: player.dominantColor.withOpacity(0.15),
-              blurRadius: 30,
-              spreadRadius: 5,
-            )
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: player.dominantColor.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.history_rounded, color: player.dominantColor, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                   Text(
-                    'Retomar donde lo dejaste',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: player.dominantColor.withOpacity(0.8),
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  Text(
-                    'Continuar desde $timeStr',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            TextButton(
-              onPressed: () => player.clearResumeRequest(),
-              child: Text('Ignorar', style: TextStyle(color: Colors.white.withOpacity(0.5))),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                player.seekTo(Duration(seconds: seconds));
-                player.clearResumeRequest();
-                HapticFeedback.mediumImpact();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: player.dominantColor,
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                elevation: 0,
-              ),
-              child: const Text('SI', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
-            ),
-          ],
-        ),
-      ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOutBack),
-    );
-  }
-
-  // ── Background ────────────────────────────────────────────────────────────
-
-  Widget _buildBackground(SongEntity song) {
-    return ImageFiltered(
-      imageFilter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
-      child: CachedNetworkImage(
-        imageUrl: song.bestThumbnail,
-        fit: BoxFit.cover,
-        color: Colors.black.withOpacity(0.3),
-        colorBlendMode: BlendMode.darken,
-      ),
-    );
-  }
-
-  // ── Top Bar ───────────────────────────────────────────────────────────────
 
   Widget _buildTopBar(BuildContext context) {
     final player = context.watch<pp.PlayerProvider>();
@@ -294,11 +164,10 @@ class _PlayerPageState extends State<PlayerPage>
               showModalBottomSheet(
                 context: context,
                 backgroundColor: Colors.transparent,
-                isScrollControlled: true,
-                builder: (context) => const EqualizerSheet(),
+                builder: (context) => const SleepTimerSheet(),
               );
             },
-            icon: const Icon(Icons.tune_rounded),
+            icon: const Icon(Icons.nights_stay_rounded),
             color: Colors.white,
           ),
           IconButton(
@@ -306,10 +175,10 @@ class _PlayerPageState extends State<PlayerPage>
               showModalBottomSheet(
                 context: context,
                 backgroundColor: Colors.transparent,
-                builder: (context) => const SleepTimerSheet(),
+                builder: (context) => const VolumeSheet(),
               );
             },
-            icon: const Icon(Icons.nights_stay_rounded),
+            icon: const Icon(Icons.volume_up_rounded),
             color: Colors.white,
           ),
         ],
@@ -318,51 +187,74 @@ class _PlayerPageState extends State<PlayerPage>
   }
 
   Widget _buildArtworkSection(SongEntity song, Color dominantColor) {
+    final player = context.read<pp.PlayerProvider>();
     return Padding(
       key: const ValueKey('artwork'),
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: GestureDetector(
-          onTap: () => setState(() => _showLyrics = !_showLyrics),
-          child: Hero(
-            tag: 'song_artwork_${song.id}',
-            child: AnimatedContainer(
-              duration: AppConstants.animationNormal,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: FlowyTheme.glowShadow(dominantColor),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: CachedNetworkImage(
-                imageUrl: song.bestThumbnail,
-                fit: BoxFit.cover,
-                placeholder: (_, __) => Container(
-                  decoration: BoxDecoration(
-                    color: FlowyColors.surfaceContainer,
-                    gradient: LinearGradient(
-                      colors: [
-                        dominantColor.withOpacity(0.3),
-                        FlowyColors.surfaceContainer,
-                      ],
-                    ),
-                  ),
-                  child: const Center(
-                    child: Icon(Icons.music_note, color: Colors.white30, size: 64),
-                  ),
-                ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Opacity(
+            opacity: 0.8,
+            child: Transform.scale(
+              scale: 1.4,
+              child: RealtimeVisualizer(
+                isPlaying: player.isPlaying,
+                color: dominantColor,
               ),
             ),
-          ).animate(onPlay: (c) => c.repeat())
-           .shimmer(duration: 3.seconds, color: Colors.white10),
-        ),
+          ),
+          AspectRatio(
+            aspectRatio: 1,
+            child: GestureDetector(
+              onTap: () => setState(() => _showLyrics = !_showLyrics),
+              child: Hero(
+                tag: 'song_artwork_${song.id}',
+                child: AnimatedContainer(
+                  duration: AppConstants.animationNormal,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: FlowyTheme.glowShadow(dominantColor),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: AnimatedScale(
+                    scale: player.isPlaying ? 1.0 : 0.95,
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeInOut,
+                    child: CachedNetworkImage(
+                      imageUrl: song.bestThumbnail,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        decoration: BoxDecoration(
+                          color: FlowyColors.surfaceContainer,
+                          gradient: LinearGradient(
+                            colors: [
+                              dominantColor.withOpacity(0.3),
+                              FlowyColors.surfaceContainer,
+                            ],
+                          ),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.music_note, color: Colors.white30, size: 64),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(
+                begin: const Offset(1.0, 1.0),
+                end: const Offset(1.02, 1.02),
+                duration: 1.seconds,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildVideoSection(SongEntity song, pp.PlayerProvider player) {
     final streamUrl = player.handler.getCachedUrl(song.id);
-    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: AspectRatio(
@@ -373,25 +265,23 @@ class _PlayerPageState extends State<PlayerPage>
             boxShadow: FlowyTheme.glowShadow(player.dominantColor, intensity: 0.3),
           ),
           clipBehavior: Clip.antiAlias,
-          child: streamUrl != null 
-            ? VideoPlayerWidget(
-                streamUrl: streamUrl,
-                isPlaying: player.isPlaying,
-                position: player.position,
-              )
-            : Container(
-                color: Colors.black,
-                child: const Center(child: CircularProgressIndicator()),
-              ),
+          child: streamUrl != null
+              ? VideoPlayerWidget(
+                  songId: song.id,
+                  streamUrl: streamUrl,
+                  isPlaying: player.isPlaying,
+                  position: player.position,
+                )
+              : Container(
+                  color: Colors.black,
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
         ),
       ),
     );
   }
 
-  // ── Song Info ─────────────────────────────────────────────────────────────
-
-  Widget _buildSongInfo(
-      BuildContext context, pp.PlayerProvider player, SongEntity song) {
+  Widget _buildSongInfo(BuildContext context, pp.PlayerProvider player, SongEntity song) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
@@ -400,28 +290,20 @@ class _PlayerPageState extends State<PlayerPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  song.title,
+                FlowyMarquee(
+                  text: song.title,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
                       ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                )
-                    .animate()
-                    .fadeIn(duration: AppConstants.animationNormal)
-                    .slideX(begin: -0.05),
+                ).animate().fadeIn(duration: AppConstants.animationNormal).slideX(begin: -0.05),
                 const SizedBox(height: 4),
                 Text(
                   song.artist,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Colors.white60,
                       ),
-                )
-                    .animate()
-                    .fadeIn(
-                        delay: 100.ms, duration: AppConstants.animationNormal),
+                ).animate().fadeIn(delay: 100.ms, duration: AppConstants.animationNormal),
               ],
             ),
           ),
@@ -434,14 +316,12 @@ class _PlayerPageState extends State<PlayerPage>
 
               return Row(
                 children: [
-                  // Download button
                   IconButton(
                     onPressed: () async {
                       if (isDownloaded) {
-                         // Mostrar confirmación de borrado opcional? Por ahora no.
-                         ScaffoldMessenger.of(context).showSnackBar(
-                           const SnackBar(content: Text('Canción descargada')),
-                         );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Canción descargada')),
+                        );
                       } else if (isDownloading) {
                         download.cancelDownload(song.id);
                       } else {
@@ -460,15 +340,11 @@ class _PlayerPageState extends State<PlayerPage>
                             ),
                           )
                         : Icon(
-                            isDownloaded
-                                ? Icons.download_done_rounded
-                                : Icons.download_rounded,
+                            isDownloaded ? Icons.download_done_rounded : Icons.download_rounded,
                             color: isDownloaded ? player.dominantColor : Colors.white60,
                           ),
                     iconSize: 26,
                   ),
-
-                  // Like button
                   IconButton(
                     onPressed: () => library.toggleLike(song),
                     icon: Icon(
@@ -486,58 +362,87 @@ class _PlayerPageState extends State<PlayerPage>
     );
   }
 
-  // ── Progress Bar ──────────────────────────────────────────────────────────
-
   Widget _buildProgressBar(BuildContext context, pp.PlayerProvider player) {
+    final accentColor = player.dominantColor;
+    final brightAccent = HSLColor.fromColor(accentColor).withLightness(0.6).withSaturation(1.0).toColor();
+    const neonCyan = Color(0xFF00F2FF);
+    const barHeight = 28.0;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          // Glow progress slider
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: player.dominantColor,
-              inactiveTrackColor: Colors.white.withOpacity(0.12),
-              thumbColor: Colors.white,
-              overlayColor: player.dominantColor.withOpacity(0.2),
-              trackHeight: 4,
-              thumbShape:
-                  const RoundSliderThumbShape(enabledThumbRadius: 7),
-            ),
-            child: Slider(
-              value: player.progress,
-              onChangeStart: (_) => HapticFeedback.selectionClick(),
-              onChanged: (v) {
-                final duration = player.duration;
-                final newPos = Duration(
-                  milliseconds: (v * duration.inMilliseconds).round(),
-                );
-                player.seekTo(newPos);
-              },
-            ),
-          ),
-
-          // Time labels
+          // ── Timer Labels (Clearly Separated) ────────────────────────────────
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   _formatDuration(player.position),
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelSmall
-                      ?.copyWith(color: Colors.white60),
+                  style: GoogleFonts.outfit(
+                    fontSize: 15,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  ),
                 ),
                 Text(
                   _formatDuration(player.duration),
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelSmall
-                      ?.copyWith(color: Colors.white60),
+                  style: GoogleFonts.outfit(
+                    fontSize: 15,
+                    color: Colors.white60,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ── Custom Thick Progress Bar (no Flutter Slider clipping) ──────────
+          GestureDetector(
+            onTapDown: (details) {
+              HapticEngine.selection();
+              final box = context.findRenderObject() as RenderBox;
+              // Account for padding (24 each side)
+              final localX = details.localPosition.dx;
+              final barWidth = box.size.width - 48; // subtract horizontal padding
+              final ratio = ((localX) / box.size.width).clamp(0.0, 1.0);
+              final newPos = Duration(
+                milliseconds: (ratio * player.duration.inMilliseconds).round(),
+              );
+              player.seekTo(newPos);
+            },
+            onHorizontalDragUpdate: (details) {
+              final box = context.findRenderObject() as RenderBox;
+              final ratio = (details.localPosition.dx / box.size.width).clamp(0.0, 1.0);
+              final newPos = Duration(
+                milliseconds: (ratio * player.duration.inMilliseconds).round(),
+              );
+              player.seekTo(newPos);
+            },
+            child: SizedBox(
+              height: barHeight + 16, // extra space for glow
+              child: CustomPaint(
+                size: Size(double.infinity, barHeight + 16),
+                painter: _ThickProgressBarPainter(
+                  progress: player.progress,
+                  barHeight: barHeight,
+                  activeGradient: LinearGradient(
+                    colors: [
+                      brightAccent.withOpacity(0.7),
+                      brightAccent,
+                      neonCyan,
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                  ),
+                  inactiveColor: Colors.white.withOpacity(0.12),
+                  glowColor: brightAccent,
+                  thumbColor: Colors.white,
+                ),
+              ),
             ),
           ),
         ],
@@ -545,68 +450,60 @@ class _PlayerPageState extends State<PlayerPage>
     );
   }
 
-  // ── Controls ──────────────────────────────────────────────────────────────
-
   Widget _buildControls(BuildContext context, pp.PlayerProvider player) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(40),
+        border: Border.all(color: Colors.white.withOpacity(0.12), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.4),
+            blurRadius: 40,
+            spreadRadius: -12,
+            offset: const Offset(0, 20),
+          ),
+        ],
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          // Shuffle
-          IconButton(
-            onPressed: () {
+          _GlassControlButton(
+            icon: Icons.shuffle_rounded,
+            isActive: player.isShuffle,
+            activeColor: player.dominantColor,
+            onTap: () {
               HapticEngine.light();
               player.toggleShuffle();
             },
-            icon: Icon(
-              Icons.shuffle_rounded,
-              color:
-                  player.isShuffle ? player.dominantColor : Colors.white38,
-              size: 22,
-            ),
           ),
-
-          // Previous
-          IconButton(
-            onPressed: () {
+          _GlassControlButton(
+            icon: Icons.skip_previous_rounded,
+            iconSize: 34,
+            onTap: () {
               HapticEngine.medium();
               player.skipToPrevious();
             },
-            icon: const Icon(Icons.skip_previous_rounded,
-                color: Colors.white, size: 36),
           ),
-
-          // Play/Pause
-          _LargePlayButton(player: player, dominantColor: player.dominantColor),
-
-          // Next
-          IconButton(
-            onPressed: () {
+          _EtherealPlayButton(player: player, dominantColor: player.dominantColor),
+          _GlassControlButton(
+            icon: Icons.skip_next_rounded,
+            iconSize: 34,
+            onTap: () {
               HapticEngine.medium();
               player.skipToNext();
             },
-            icon: const Icon(Icons.skip_next_rounded,
-                color: Colors.white, size: 36),
           ),
-
-          // Repeat
-          IconButton(
-            onPressed: () {
+          _GlassControlButton(
+            icon: player.repeatMode == pp.FlowyRepeatMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+            isActive: player.repeatMode != pp.FlowyRepeatMode.off,
+            activeColor: player.dominantColor,
+            onTap: () {
               HapticEngine.light();
               player.cycleRepeatMode();
             },
-            icon: Icon(
-              player.repeatMode == pp.RepeatMode.one
-                  ? Icons.repeat_one_rounded
-                  : Icons.repeat_rounded,
-              color: player.repeatMode != pp.RepeatMode.off
-                  ? player.dominantColor
-                  : Colors.white38,
-              size: 22,
-            ),
           ),
         ],
       ),
@@ -620,58 +517,330 @@ class _PlayerPageState extends State<PlayerPage>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _LargePlayButton extends StatelessWidget {
+class _EtherealPlayButton extends StatelessWidget {
   final pp.PlayerProvider player;
   final Color dominantColor;
 
-  const _LargePlayButton(
-      {required this.player, required this.dominantColor});
+  const _EtherealPlayButton({required this.player, required this.dominantColor});
 
   @override
   Widget build(BuildContext context) {
+    final vibrantColor = HSLColor.fromColor(dominantColor).withLightness(0.6).withSaturation(1.0).toColor();
+    final deepColor = HSLColor.fromColor(dominantColor).withLightness(0.15).toColor();
+    
     return GestureDetector(
       onTap: () {
         HapticEngine.medium();
         player.togglePlayPause();
       },
-      child: AnimatedContainer(
-        duration: AppConstants.animationFast,
-        width: 70,
-        height: 70,
+      child: Container(
+        width: 84,
+        height: 84,
         decoration: BoxDecoration(
-          color: dominantColor,
           shape: BoxShape.circle,
-          boxShadow: FlowyTheme.glowShadow(dominantColor),
+          boxShadow: [
+            BoxShadow(
+              color: vibrantColor.withOpacity(0.5).withValues(alpha: 0.5),
+              blurRadius: 30,
+              spreadRadius: 2,
+            ),
+          ],
         ),
-        child: player.isLoading
-            ? const Center(
-                child: SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2.5, color: Colors.white),
-              ))
-            : Icon(
-                player.isPlaying
-                    ? Icons.pause_rounded
-                    : Icons.play_arrow_rounded,
-                color: Colors.white,
-                size: 38,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Internal Glow Layer
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [vibrantColor, deepColor],
+                ),
               ),
-      )
-          .animate(
-            target: player.isPlaying ? 1 : 0,
-            onPlay: (c) => c.repeat(),
-          )
-          .scale(begin: const Offset(1, 1), end: const Offset(0.92, 0.92))
-          .then()
-          .scale(begin: const Offset(0.92, 0.92), end: const Offset(1, 1))
-          .shimmer(
-            duration: 2.seconds,
-            color: Colors.white.withOpacity(0.2),
-          ),
+            ),
+            // Frosted Glass Layer
+            Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withOpacity(0.4), width: 1),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.white.withOpacity(0.25),
+                    Colors.white.withOpacity(0.05),
+                  ],
+                ),
+              ),
+            ),
+            // Icon
+            player.isLoading
+                ? const CircularProgressIndicator(strokeWidth: 3, color: Colors.white)
+                : Icon(
+                    player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 48,
+                  ),
+          ],
+        ),
+      ).animate(target: player.isPlaying ? 1 : 0)
+       .scale(begin: const Offset(1, 1), end: const Offset(0.92, 0.92), duration: 200.ms)
+       .shimmer(duration: 3.seconds, color: Colors.white.withOpacity(0.3)),
     );
+  }
+}
+
+class _GlassControlButton extends StatefulWidget {
+  final IconData icon;
+  final double iconSize;
+  final bool isActive;
+  final Color? activeColor;
+  final VoidCallback onTap;
+
+  const _GlassControlButton({
+    required this.icon,
+    required this.onTap,
+    this.iconSize = 28,
+    this.isActive = false,
+    this.activeColor,
+  });
+
+  @override
+  State<_GlassControlButton> createState() => _GlassControlButtonState();
+}
+
+class _GlassControlButtonState extends State<_GlassControlButton> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.activeColor ?? Colors.white;
+    final color = widget.isActive ? accent : (_isHovered ? Colors.white : Colors.white.withOpacity(0.6));
+    
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 54,
+          height: 54,
+          decoration: BoxDecoration(
+            color: _isHovered ? Colors.white.withOpacity(0.08) : Colors.transparent,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: _isHovered ? Colors.white.withOpacity(0.15) : Colors.transparent,
+              width: 1,
+            ),
+          ),
+          child: Icon(
+            widget.icon,
+            color: color,
+            size: widget.iconSize,
+            shadows: widget.isActive ? [Shadow(color: accent.withOpacity(0.6), blurRadius: 10)] : null,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Hyper-Modern Painters ───────────────────────────────────────────────────
+
+class _LiquidBeamTrackShape extends SliderTrackShape with BaseSliderTrackShape {
+  final Gradient gradient;
+  final Color glowColor;
+
+  _LiquidBeamTrackShape({required this.gradient, required this.glowColor});
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset offset, {
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required Animation<double> enableAnimation,
+    required TextDirection textDirection,
+    required Offset thumbCenter,
+    Offset? secondaryOffset,
+    bool isDiscrete = false,
+    bool isEnabled = false,
+    double additionalActiveTrackHeight = 0,
+  }) {
+    final Rect trackRect = getPreferredRect(
+      parentBox: parentBox,
+      offset: offset,
+      sliderTheme: sliderTheme,
+      isEnabled: isEnabled,
+      isDiscrete: isDiscrete,
+    );
+
+    final activePaint = Paint()..shader = gradient.createShader(trackRect);
+    final inactivePaint = Paint()..color = sliderTheme.inactiveTrackColor!;
+
+    // Liquid Glow Aura
+    final auraPaint = Paint()
+      ..color = glowColor.withOpacity(0.4)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+
+    final activeRect = Rect.fromLTRB(trackRect.left, trackRect.top, thumbCenter.dx, trackRect.bottom);
+    final inactiveRect = Rect.fromLTRB(thumbCenter.dx, trackRect.top, trackRect.right, trackRect.bottom);
+
+    // Draw Inactive
+    context.canvas.drawRRect(RRect.fromRectAndRadius(inactiveRect, const Radius.circular(24)), inactivePaint);
+    
+    // Draw Aura/Glow for Active
+    context.canvas.drawRRect(RRect.fromRectAndRadius(activeRect, const Radius.circular(24)), auraPaint);
+    
+    // Draw Liquid Beam (Active)
+    context.canvas.drawRRect(RRect.fromRectAndRadius(activeRect, const Radius.circular(24)), activePaint);
+    
+    // Inner Sharp Light Streak
+    final streakPaint = Paint()
+      ..color = Colors.white.withOpacity(0.3)
+      ..style = PaintingStyle.fill;
+    final streakRect = Rect.fromLTRB(trackRect.left + 5, trackRect.top + 2, thumbCenter.dx - 5, trackRect.top + 5);
+    context.canvas.drawRRect(RRect.fromRectAndRadius(streakRect, const Radius.circular(10)), streakPaint);
+  }
+}
+
+class _CrystalGlowThumbShape extends RoundSliderThumbShape {
+  final Color glowColor;
+  const _CrystalGlowThumbShape({required this.glowColor, double enabledThumbRadius = 14.0}) 
+    : super(enabledThumbRadius: enabledThumbRadius);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final Canvas canvas = context.canvas;
+
+    // Diamond Glow
+    final glowPaint = Paint()
+      ..color = glowColor.withOpacity(0.7)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
+    canvas.drawCircle(center, enabledThumbRadius * 1.6, glowPaint);
+
+    // Main Crystal Body
+    final thumbPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [Colors.white, glowColor.withOpacity(0.1)],
+      ).createShader(Rect.fromCircle(center: center, radius: enabledThumbRadius));
+    canvas.drawCircle(center, enabledThumbRadius, thumbPaint);
+    
+    // High-Gloss Border
+    final borderPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+    canvas.drawCircle(center, enabledThumbRadius, borderPaint);
+
+    // Inner Core
+    final corePaint = Paint()..color = glowColor;
+    canvas.drawCircle(center, 5, corePaint);
+  }
+}
+
+// ─── Deprecated Classes Removed in favor of Ethereal Styles ───
+
+// ── Thick Custom Progress Bar Painter ─────────────────────────────────────────
+
+class _ThickProgressBarPainter extends CustomPainter {
+  final double progress;
+  final double barHeight;
+  final Gradient activeGradient;
+  final Color inactiveColor;
+  final Color glowColor;
+  final Color thumbColor;
+
+  _ThickProgressBarPainter({
+    required this.progress,
+    required this.barHeight,
+    required this.activeGradient,
+    required this.inactiveColor,
+    required this.glowColor,
+    required this.thumbColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final barTop = (size.height - barHeight) / 2;
+    final barRect = Rect.fromLTWH(0, barTop, size.width, barHeight);
+    final radius = Radius.circular(barHeight / 2);
+
+    // ── Inactive Track (full width, clearly visible) ──────────────────────
+    final inactivePaint = Paint()..color = inactiveColor;
+    canvas.drawRRect(RRect.fromRectAndRadius(barRect, radius), inactivePaint);
+
+    // ── Active Track (gradient fill) ──────────────────────────────────────
+    if (progress > 0.001) {
+      final activeWidth = size.width * progress;
+      final activeRect = Rect.fromLTWH(0, barTop, activeWidth, barHeight);
+
+      // Glow behind active
+      final glowPaint = Paint()
+        ..color = glowColor.withOpacity(0.5)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
+      canvas.drawRRect(RRect.fromRectAndRadius(activeRect, radius), glowPaint);
+
+      // Active gradient fill
+      final activePaint = Paint()
+        ..shader = activeGradient.createShader(activeRect);
+      canvas.drawRRect(RRect.fromRectAndRadius(activeRect, radius), activePaint);
+
+      // Glass streak on top
+      final streakRect = Rect.fromLTWH(4, barTop + 3, activeWidth - 8, 4);
+      if (streakRect.width > 0) {
+        final streakPaint = Paint()..color = Colors.white.withOpacity(0.25);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(streakRect, const Radius.circular(2)),
+          streakPaint,
+        );
+      }
+
+      // ── Thumb Circle ──────────────────────────────────────────────────
+      final thumbX = activeWidth.clamp(0.0, size.width);
+      final thumbY = barTop + barHeight / 2;
+      final thumbRadius = barHeight * 0.55;
+
+      // Thumb glow
+      final thumbGlowPaint = Paint()
+        ..color = glowColor.withOpacity(0.6)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+      canvas.drawCircle(Offset(thumbX, thumbY), thumbRadius * 1.3, thumbGlowPaint);
+
+      // Thumb body
+      final thumbPaint = Paint()..color = thumbColor;
+      canvas.drawCircle(Offset(thumbX, thumbY), thumbRadius, thumbPaint);
+
+      // Thumb inner core
+      final corePaint = Paint()..color = glowColor;
+      canvas.drawCircle(Offset(thumbX, thumbY), 4, corePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThickProgressBarPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.glowColor != glowColor;
   }
 }

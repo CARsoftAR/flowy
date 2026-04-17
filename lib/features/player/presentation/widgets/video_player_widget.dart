@@ -1,17 +1,20 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+import 'package:video_player/video_player.dart' as vp;
 import 'package:chewie/chewie.dart';
-import 'package:flowy/features/player/presentation/providers/player_provider.dart';
-import 'package:provider/provider.dart';
 
 class VideoPlayerWidget extends StatefulWidget {
+  final String songId;
   final String streamUrl;
   final bool isPlaying;
   final Duration position;
 
   const VideoPlayerWidget({
     super.key,
+    required this.songId,
     required this.streamUrl,
     required this.isPlaying,
     required this.position,
@@ -22,17 +25,61 @@ class VideoPlayerWidget extends StatefulWidget {
 }
 
 class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
-  VideoPlayerController? _videoController;
+  Player? _mkPlayer;
+  VideoController? _mkController;
+
+  vp.VideoPlayerController? _vpController;
   ChewieController? _chewieController;
+
   bool _isInitialized = false;
   String? _loadedUrl;
-
-  Duration? _lastSentPosition;
+  String _debugInfo = 'Starting...';
+  int _textureId = -1;
+  
+  Timer? _pollingTimer;
+  List<StreamSubscription> _subscriptions = [];
 
   @override
   void initState() {
     super.initState();
+    debugPrint('[VideoPlayer] initState');
     _initializePlayer();
+    
+    _pollingTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      _checkTexture();
+    });
+  }
+
+  void _setupWindowsListeners() {
+    if (_mkPlayer == null) return;
+    _subscriptions.add(_mkPlayer!.stream.playing.listen((playing) {
+      if (mounted) {
+        setState(() {
+          final state = _mkPlayer!.state;
+          _debugInfo = 'Res: ${state.width}x${state.height} | Tracks: ${state.tracks.video.length} | Play: $playing';
+        });
+      }
+    }));
+    _subscriptions.add(_mkPlayer!.stream.width.listen((width) {
+      if (mounted) {
+        setState(() {
+          final state = _mkPlayer!.state;
+          _debugInfo = 'Res: ${width}x${state.height} | Tracks: ${state.tracks.video.length} | Play: ${state.playing}';
+        });
+      }
+    }));
+  }
+
+  void _checkTexture() {
+    if (_mkController != null && mounted) {
+      final newTextureId = _mkController!.id.value ?? -1;
+      if (newTextureId != _textureId && newTextureId > 0) {
+        debugPrint('[VideoPlayer] Texture poll: $_textureId -> $newTextureId');
+        setState(() {
+          _textureId = newTextureId;
+        });
+      }
+    }
   }
 
   @override
@@ -41,111 +88,167 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     if (oldWidget.streamUrl != widget.streamUrl) {
       _initializePlayer();
     } else if (_isInitialized) {
-      // Sincronizar play/pause
-      if (widget.isPlaying && !_videoController!.value.isPlaying) {
-        _videoController!.play();
-      } else if (!widget.isPlaying && _videoController!.value.isPlaying) {
-        _videoController!.pause();
-      }
-      
-      // Sincronizar posición SOLO si el cambio viene de fuera (just_audio)
-      // y no es un rebote de lo que acabamos de enviar desde el video.
-      if (oldWidget.position != widget.position) {
-        final diff = (widget.position - _videoController!.value.position).inSeconds.abs();
-        if (diff > 2) {
-          final isRecentBounce = _lastSentPosition != null && 
-              (widget.position - _lastSentPosition!).inSeconds.abs() <= 2;
-          
-          if (!isRecentBounce) {
-            _videoController!.seekTo(widget.position);
-          }
-        }
-      }
+      _syncPlayback();
     }
   }
 
-  void _onVideoControllerUpdate() {
-    if (!_isInitialized || _videoController == null) return;
-
-    final videoPos = _videoController!.value.position;
-    final diff = (videoPos - widget.position).inSeconds.abs();
-
-    // Si el video se movió manualmente (más de 3 segundos de diferencia con el audio)
-    if (diff > 3) {
-      // Evitar bucles: solo enviar si es un cambio "nuevo" respecto al último enviado
-      final isNewSeek = _lastSentPosition == null || 
-          (videoPos - _lastSentPosition!).inSeconds.abs() > 2;
-
-      if (isNewSeek) {
-        _lastSentPosition = videoPos;
-        // Notificar al PlayerProvider para que mueva el audio
-        context.read<PlayerProvider>().seekTo(videoPos);
+  void _syncPlayback() {
+    if (Platform.isWindows) {
+      if (_mkPlayer == null) return;
+      if (widget.isPlaying && !_mkPlayer!.state.playing) {
+        _mkPlayer!.play();
+      } else if (!widget.isPlaying && _mkPlayer!.state.playing) {
+        _mkPlayer!.pause();
       }
-    }
-
-    // Limpiar el lastSentPosition si ya estamos en sincronía básica (avance normal)
-    if (diff <= 1) {
-      _lastSentPosition = null;
+      final diff = (widget.position - _mkPlayer!.state.position).inSeconds.abs();
+      if (diff > 2) _mkPlayer!.seek(widget.position);
+    } else {
+      if (_vpController == null || !_vpController!.value.isInitialized) return;
+      if (widget.isPlaying && !_vpController!.value.isPlaying) {
+        _vpController!.play();
+      } else if (!widget.isPlaying && _vpController!.value.isPlaying) {
+        _vpController!.pause();
+      }
+      final diff = (widget.position - _vpController!.value.position).inSeconds.abs();
+      if (diff > 2) _vpController!.seekTo(widget.position);
     }
   }
 
   Future<void> _initializePlayer() async {
-    if (_loadedUrl == widget.streamUrl && _videoController != null) return;
+    if (_loadedUrl == widget.streamUrl && _isInitialized) return;
+    _loadedUrl = widget.streamUrl;
 
     await _disposeControllers();
 
-    _loadedUrl = widget.streamUrl;
-    _videoController = VideoPlayerController.networkUrl(
-      Uri.parse(widget.streamUrl),
-      httpHeaders: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
-        'Referer': 'https://music.youtube.com/',
-      },
-    );
+    if (Platform.isWindows) {
+      await _initWindowsNative();
+    } else {
+      await _initMobilePlayer();
+    }
+  }
 
+  Future<void> _initWindowsNative() async {
     try {
-      await _videoController!.initialize();
-      _videoController!.addListener(_onVideoControllerUpdate);
+      _debugInfo = '1. Creating Player...';
+      if (mounted) setState(() {});
       
-      _chewieController = ChewieController(
-        videoPlayerController: _videoController!,
-        autoPlay: widget.isPlaying,
-        looping: false,
-        showControls: true,
-        allowFullScreen: true,
-        aspectRatio: _videoController!.value.aspectRatio,
-        placeholder: Container(color: Colors.black),
-        materialProgressColors: ChewieProgressColors(
-          playedColor: Theme.of(context).colorScheme.primary,
-          handleColor: Theme.of(context).colorScheme.primary,
-          backgroundColor: Colors.white24,
-          bufferedColor: Colors.white38,
+      _mkPlayer = Player();
+      _setupWindowsListeners();
+
+      // Configuración de RED y CACHÉ (Evitar I/O Errors y Hangs en Windows)
+      final player = _mkPlayer;
+      if (player is dynamic) {
+        try {
+          await (player as dynamic).setProperty('ytdl', 'no');
+          await (player as dynamic).setProperty('cache', 'no'); 
+          await (player as dynamic).setProperty('demuxer-max-bytes', '67108864'); 
+          await (player as dynamic).setProperty('tls-verify', 'no');
+          await (player as dynamic).setProperty('network-timeout', '15');
+          await (player as dynamic).setProperty('hwdec', 'auto-safe'); 
+          await (player as dynamic).setProperty('vo', 'gpu');
+          await (player as dynamic).setProperty('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+        } catch (e) {
+          debugPrint('[VideoPlayer] MPV Property Error: $e');
+        }
+      }
+      
+      _debugInfo = '2. Creating VideoController...';
+      if (mounted) setState(() {});
+      
+      _mkController = VideoController(
+        _mkPlayer!,
+        configuration: const VideoControllerConfiguration(
+          enableHardwareAcceleration: true,
         ),
       );
+      
+      _textureId = _mkController!.id.value ?? -1;
+      _debugInfo = '3. Setting volume...';
+      if (mounted) setState(() {});
+      await _mkPlayer!.setVolume(0);
 
-      // Mutear video para evitar duplicar el audio (just_audio ya lo reproduce)
-      await _videoController!.setVolume(0.0);
-      await _videoController!.seekTo(widget.position);
+      if (widget.streamUrl.isNotEmpty) {
+        final shortUrl = widget.streamUrl.length > 30 ? widget.streamUrl.substring(0, 30) : widget.streamUrl;
+        _debugInfo = '4. Opening: $shortUrl...';
+        if (mounted) setState(() {});
+        
+        final media = Media(
+          widget.streamUrl,
+          httpHeaders: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Referer': 'https://www.youtube.com',
+          },
+        );
+        
+        await _mkPlayer!.open(media, play: widget.isPlaying);
+        await _mkPlayer!.setVideoTrack(VideoTrack.auto());
+        await _mkPlayer!.seek(widget.position);
+      }
 
+      // Dejar que el motor respire y cargue el primer frame
+      await Future.delayed(const Duration(seconds: 3));
+
+      final state = _mkPlayer!.state;
+      final playing = state.playing;
+      final tracks = state.tracks.video.length;
+      final width = state.width;
+      final height = state.height;
+      
+      _debugInfo = 'Res: ${width}x${height} | Tracks: $tracks | Play: $playing';
+      
       if (mounted) {
         setState(() {
           _isInitialized = true;
         });
       }
+    } catch (e, st) {
+      _debugInfo = 'ERROR: $e';
+      debugPrint('[VideoPlayer] ERROR: $e');
+      debugPrint('[VideoPlayer] Stack: $st');
+    }
+  }
+
+  Future<void> _initMobilePlayer() async {
+    _vpController = vp.VideoPlayerController.networkUrl(Uri.parse(widget.streamUrl));
+    try {
+      await _vpController!.initialize();
+      await _vpController!.setVolume(0);
+      _chewieController = ChewieController(
+        videoPlayerController: _vpController!,
+        autoPlay: widget.isPlaying,
+        showControls: false,
+        aspectRatio: _vpController!.value.aspectRatio,
+      );
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
     } catch (e) {
-      debugPrint('Video Player Error: $e');
+      debugPrint('Mobile Video Player Error: $e');
     }
   }
 
   Future<void> _disposeControllers() async {
     _isInitialized = false;
-    if (_videoController != null) {
-      _videoController!.removeListener(_onVideoControllerUpdate);
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+
+    for (var s in _subscriptions) {
+      s.cancel();
     }
-    if (_chewieController != null) _chewieController!.dispose();
-    if (_videoController != null) await _videoController!.dispose();
+    _subscriptions.clear();
+    
+    final mk = _mkPlayer;
+    final vp = _vpController;
+    final ch = _chewieController;
+
+    _mkPlayer = null;
+    _mkController = null;
+    _vpController = null;
     _chewieController = null;
-    _videoController = null;
+
+    if (ch != null) ch.dispose();
+    if (vp != null) await vp.dispose();
+    if (mk != null) await mk.dispose();
   }
 
   @override
@@ -156,15 +259,93 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isInitialized || _chewieController == null) {
-      return const Center(
-        child: CircularProgressIndicator(),
+    debugPrint('[VideoPlayer] BUILD: isInit=$_isInitialized, texture=$_textureId');
+    
+    if (!_isInitialized) {
+      return Container(
+        color: Colors.black,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Colors.white24, strokeWidth: 2),
+              const SizedBox(height: 16),
+              Text(
+                _debugInfo,
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
       );
     }
 
-    return Container(
-      color: Colors.black,
-      child: Chewie(controller: _chewieController!),
-    );
+    if (Platform.isWindows && _mkController != null) {
+      return Container(
+        color: Colors.black,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (_isInitialized)
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Video(
+                  controller: _mkController!,
+                  fill: Colors.black,
+                  fit: BoxFit.contain,
+                ),
+              )
+            else
+              const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white24, strokeWidth: 2),
+                    SizedBox(height: 16),
+                    Text(
+                      'Cargando video...',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            Positioned(
+              bottom: 8,
+              left: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                color: Colors.black54,
+                child: Text(
+                  _debugInfo,
+                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_chewieController != null) {
+      return Container(
+        color: Colors.black,
+        child: Chewie(controller: _chewieController!),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+}
+
+class RawTexture extends StatelessWidget {
+  final int textureId;
+  
+  const RawTexture({super.key, required this.textureId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Texture(textureId: textureId);
   }
 }

@@ -1,5 +1,14 @@
+enum AppFlavor { standard, premium }
+
 class AppConstants {
   AppConstants._();
+
+  // ── Flavor Configuration ──────────────────────────────────────────
+  static const AppFlavor currentFlavor = AppFlavor.premium;
+  static bool get isPremium => currentFlavor == AppFlavor.premium;
+  static bool get isStandard => currentFlavor == AppFlavor.standard;
+  static String get flavorName => isPremium ? 'PREMIUM' : 'STANDARD';
+
 
   static const String appName = 'Flowy';
   static const String appVersion = '1.0.0';

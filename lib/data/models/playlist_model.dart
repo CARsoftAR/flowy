@@ -7,6 +7,8 @@ class UserPlaylistModel {
   final String? description;
   final String? thumbnailUrl;
   final List<SongModel> tracks;
+  final bool isFolder;
+  final List<UserPlaylistModel> subPlaylists;
 
   UserPlaylistModel({
     required this.id,
@@ -14,6 +16,8 @@ class UserPlaylistModel {
     this.description,
     this.thumbnailUrl,
     required this.tracks,
+    this.isFolder = false,
+    this.subPlaylists = const [],
   });
 
   factory UserPlaylistModel.fromJson(Map<String, dynamic> json) {
@@ -25,6 +29,10 @@ class UserPlaylistModel {
       tracks: (json['tracks'] as List<dynamic>? ?? [])
           .map((e) => SongModel.fromJson(e as Map<String, dynamic>))
           .toList(),
+      isFolder: json['isFolder'] as bool? ?? false,
+      subPlaylists: (json['subPlaylists'] as List<dynamic>? ?? [])
+          .map((e) => UserPlaylistModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -35,6 +43,8 @@ class UserPlaylistModel {
       'description': description,
       'thumbnailUrl': thumbnailUrl,
       'tracks': tracks.map((e) => e.toJson()).toList(),
+      'isFolder': isFolder,
+      'subPlaylists': subPlaylists.map((e) => e.toJson()).toList(),
     };
   }
 
@@ -46,6 +56,8 @@ class UserPlaylistModel {
       thumbnailUrl: thumbnailUrl,
       tracks: tracks.map((e) => e.toSongEntity()).toList(),
       trackCount: tracks.length,
+      isFolder: isFolder,
+      subPlaylists: subPlaylists.map((e) => e.toEntity()).toList(),
     );
   }
 
@@ -56,6 +68,8 @@ class UserPlaylistModel {
       description: entity.description,
       thumbnailUrl: entity.thumbnailUrl,
       tracks: entity.tracks.map((e) => SongModel.fromEntity(e)).toList(),
+      isFolder: entity.isFolder,
+      subPlaylists: entity.subPlaylists.map((e) => UserPlaylistModel.fromEntity(e)).toList(),
     );
   }
 }

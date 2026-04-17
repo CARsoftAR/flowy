@@ -6,7 +6,7 @@ description: Build APK and copy to project root folder
 
 1. Build the release APK
 ```
-flutter build apk --release 2>&1
+flutter build apk --release --no-tree-shake-icons 2>&1
 ```
 
 2. Copy the APK to the project root (c:\Apps\flowy\)

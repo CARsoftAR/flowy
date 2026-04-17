@@ -7,7 +7,8 @@ import '../../data/services/spotify_importer_service.dart';
 import '../providers/library_provider.dart';
 
 class SpotifyImportDialog extends StatefulWidget {
-  const SpotifyImportDialog({super.key});
+  final String? parentFolderId;
+  const SpotifyImportDialog({super.key, this.parentFolderId});
 
   @override
   State<SpotifyImportDialog> createState() => _SpotifyImportDialogState();
@@ -51,8 +52,11 @@ class _SpotifyImportDialogState extends State<SpotifyImportDialog> {
       });
 
       // Crear la playlist vacía local
-      await context.read<LibraryProvider>().createPlaylist(info.title, description: 'Importada desde Spotify');
-      final newPlaylistId = context.read<LibraryProvider>().playlists.last.id;
+      final newPlaylistId = await context.read<LibraryProvider>().createPlaylist(
+        info.title, 
+        description: 'Importada desde Spotify',
+        parentFolderId: widget.parentFolderId,
+      );
       final library = context.read<LibraryProvider>();
 
       await for (final songEntity in _importer.searchAndProcessTracks(info.tracks)) {

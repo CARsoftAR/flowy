@@ -15,9 +15,16 @@ class ChapterSheet extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.95),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        color: Color(0xFF0D0D14), // Solid dark background
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
         border: Border.all(color: Colors.white10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black54,
+            blurRadius: 40,
+            offset: Offset(0, -10),
+          )
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

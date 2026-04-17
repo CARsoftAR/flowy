@@ -41,7 +41,7 @@ class SmartPlaylistsRow extends StatelessWidget {
     ];
 
     return SizedBox(
-      height: 160,
+      height: 140,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
@@ -57,8 +57,10 @@ class SmartPlaylistsRow extends StatelessWidget {
 
           if (tracks.isEmpty && index > 0) return const SizedBox.shrink();
 
-          return GestureDetector(
-            onTap: () {
+          return MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () {
               HapticEngine.medium();
               if (tracks.isNotEmpty) {
                 final player = context.read<PlayerProvider>();
@@ -73,7 +75,7 @@ class SmartPlaylistsRow extends StatelessWidget {
               }
             },
             child: Container(
-              width: 260,
+              width: 180,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: colors,
@@ -94,33 +96,33 @@ class SmartPlaylistsRow extends StatelessWidget {
                 child: Stack(
                   children: [
                     Positioned(
-                      right: -20,
-                      bottom: -20,
+                      right: -15,
+                      bottom: -15,
                       child: Icon(
                         icon,
-                        size: 100,
+                        size: 60,
                         color: Colors.white.withOpacity(0.2),
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.2),
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(icon, color: Colors.white, size: 20),
+                            child: Icon(icon, color: Colors.white, size: 16),
                           ),
                           const Spacer(),
                           Text(
                             title,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 18,
+                              fontSize: 14,
                               fontWeight: FontWeight.w800,
                               letterSpacing: -0.5,
                             ),
@@ -129,7 +131,7 @@ class SmartPlaylistsRow extends StatelessWidget {
                             subtitle,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.8),
-                              fontSize: 12,
+                              fontSize: 10,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -140,8 +142,9 @@ class SmartPlaylistsRow extends StatelessWidget {
                 ),
               ),
             ),
-          ).animate(delay: Duration(milliseconds: index * 100)).fadeIn().slideX(begin: 0.1);
-        },
+          ),
+        ).animate(delay: Duration(milliseconds: index * 100)).fadeIn().slideX(begin: 0.1);
+      },
       ),
     );
   }

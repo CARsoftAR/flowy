@@ -62,6 +62,58 @@ class EqualizerSheet extends StatelessWidget {
           ),
           
           const SizedBox(height: 20),
+
+          // Auto-EQ Toggle
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: effects.autoEqEnabled ? Colors.amber.withOpacity(0.05) : Colors.white.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: effects.autoEqEnabled ? Colors.amber.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.auto_awesome_rounded, 
+                          size: 16, 
+                          color: effects.autoEqEnabled ? Colors.amber : Colors.white24,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Auto-EQ Inteligente',
+                          style: GoogleFonts.outfit(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: effects.autoEqEnabled ? Colors.amber : Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Optimiza el audio según el género',
+                      style: TextStyle(fontSize: 11, color: Colors.white38),
+                    ),
+                  ],
+                ),
+                Switch(
+                  value: effects.autoEqEnabled,
+                  onChanged: (_) => effects.toggleAutoEq(),
+                  activeColor: Colors.amber,
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 24),
           
           // Presets
           SizedBox(
@@ -102,92 +154,80 @@ class EqualizerSheet extends StatelessWidget {
           // Bands
           Opacity(
             opacity: effects.equalizerEnabled ? 1.0 : 0.4,
-            child: FutureBuilder<List<AndroidEqualizerBand>>(
-              future: effects.handler.getEqualizerBands(),
-              builder: (context, snapshot) {
-                final bands = snapshot.data ?? [];
-                
-                // If bands empty, we show 5 default placeholders that simulate real bands
-                // to avoid "No disponible" when it's just initializing
-                final displayCount = bands.isEmpty ? 5 : bands.length;
-                
-                return Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: List.generate(displayCount, (index) {
-                        final gain = effects.bandGains.length > index ? effects.bandGains[index] : 0.0;
-                        
-                        String label = '';
-                        if (bands.isNotEmpty) {
-                          final rawFreq = bands[index].centerFrequency;
-                          final freqHz = rawFreq > 100000 ? (rawFreq / 1000).round() : rawFreq.round();
-                          label = freqHz >= 1000 ? '${(freqHz / 1000).toStringAsFixed(1)}k' : '${freqHz}Hz';
-                        } else {
-                          // Fallback labels
-                          label = ['60', '230', '910', '3k', '14k'][index];
-                        }
-                        
-                        return Column(
-                          children: [
-                            Text(
-                              '${gain.toInt() > 0 ? "+" : ""}${gain.toInt()}',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: effects.equalizerEnabled ? scheme.primary : Colors.white24,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 10
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              height: 180,
-                              child: RotatedBox(
-                                quarterTurns: 3,
-                                child: SliderTheme(
-                                  data: SliderThemeData(
-                                    trackHeight: 4,
-                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-                                    activeTrackColor: scheme.primary,
-                                    inactiveTrackColor: Colors.white10,
-                                    thumbColor: Colors.white,
-                                    trackShape: const RoundedRectSliderTrackShape(),
-                                  ),
-                                  child: Slider(
-                                    value: gain,
-                                    min: -15, // Increased range
-                                    max: 15,
-                                    onChanged: effects.equalizerEnabled 
-                                      ? (val) => effects.setBandGain(index, val)
-                                      : null,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              label,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: effects.equalizerEnabled ? Colors.white70 : Colors.white24, 
-                                fontSize: 10
-                              ),
-                            ),
-                          ],
-                        );
-                      }),
-                    ),
-                    if (bands.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          'Cargando parámetros de audio...',
-                          style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.1)),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: List.generate(effects.bands.isEmpty ? 5 : effects.bands.length, (index) {
+                    final gain = effects.bandGains.length > index ? effects.bandGains[index] : 0.0;
+                    
+                    String label = '';
+                    if (effects.bands.isNotEmpty) {
+                      final rawFreq = (effects.bands[index] as dynamic).centerFrequency;
+                      final freqHz = rawFreq > 100000 ? (rawFreq / 1000).round() : rawFreq.round();
+                      label = freqHz >= 1000 ? '${(freqHz / 1000).toStringAsFixed(1)}k' : '${freqHz}Hz';
+                    } else {
+                      label = ['60', '230', '910', '3k', '14k'][index];
+                    }
+                    
+                    return Column(
+                      children: [
+                        Text(
+                          '${gain.toInt() > 0 ? "+" : ""}${gain.toInt()}',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: effects.equalizerEnabled ? scheme.primary : Colors.white24,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10
+                          ),
                         ),
-                      ),
-                  ],
-                );
-              }
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 180,
+                          child: RotatedBox(
+                            quarterTurns: 3,
+                            child: SliderTheme(
+                              data: SliderThemeData(
+                                trackHeight: 4,
+                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                                activeTrackColor: scheme.primary,
+                                inactiveTrackColor: Colors.white10,
+                                thumbColor: Colors.white,
+                                trackShape: const RoundedRectSliderTrackShape(),
+                              ),
+                              child: Slider(
+                                value: gain.clamp(-15.0, 15.0),
+                                min: -15,
+                                max: 15,
+                                onChanged: effects.equalizerEnabled 
+                                  ? (val) => effects.setBandGain(index, val)
+                                  : null,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          label,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: effects.equalizerEnabled ? Colors.white70 : Colors.white24, 
+                            fontSize: 10
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+                if (effects.bands.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Cargando parámetros de audio...',
+                      style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.1)),
+                    ),
+                  ),
+              ],
             ),
           ),
           
@@ -220,10 +260,10 @@ class EqualizerSheet extends StatelessWidget {
                   ],
                 ),
                 Slider(
-                  value: effects.crossfadeDuration,
+                  value: effects.crossfadeDuration.clamp(0.0, 10.0),
                   min: 0,
-                  max: 12,
-                  divisions: 12,
+                  max: 10,
+                  divisions: 10,
                   onChanged: (val) => effects.setCrossfade(val),
                   activeColor: scheme.primary,
                   inactiveColor: Colors.white10,

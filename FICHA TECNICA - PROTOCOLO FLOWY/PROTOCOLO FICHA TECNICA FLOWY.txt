@@ -1,0 +1,24 @@
+FICHA TÉCNICA: PROTOCOLO FLOWY "CLOUD-SYNC"
+(Guardá este bloque. Es lo que me tenés que pasar la próxima vez para que yo "recupere la memoria" al instante).
+
+Proyecto: Flowy (Music Player Premium Lux).
+
+Plataformas: Flutter (Android / Windows).
+
+Arquitectura de Red: Invidious API con Inyección Dinámica.
+
+Endpoint Maestro (Gist RAW): https://gist.githubusercontent.com/CARsoftAR/f7fe3574509efc054c0708dfbf7a40a2/raw/9fc85acfda4d3681e9f4bc4c670c0fe7c9092c44/flowy_config.json
+
+Fallback Stack (Emergencia): snopyta.org, yewtu.be, inv.tux.rs.
+
+Lógica de Inyección: El api_url del JSON debe pisar la base del extractor de audio en el initState o mediante un Provider/Riverpod.
+
+
+--------------------------------------------
+ESTADO: Test de Inyección en Caliente.
+HERRAMIENTA: _refreshConnectionMotor con SnackBar de debug.
+LINK RAW: https://gist.githubusercontent.com/CARsoftAR/f7fe3574509efc054c0708dfbf7a40a2/raw/...
+PRÓXIMO PASO: Si la URL es correcta pero no hay audio, inyectar FlowyEngine.currentApiUrl en el AudioService.
+
+
+RAPIDO YA!!

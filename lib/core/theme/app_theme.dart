@@ -13,22 +13,28 @@ class FlowyColors {
   FlowyColors._();
 
   // ── Brand Seed ────────────────────────────────────────────────────────────
-  static const Color brandSeed = Color(0xFF7C4DFF); // Electric Violet
-  static const Color brandAccent = Color(0xFF00E5FF); // Cyan accent
+  // ── Brand Seed ────────────────────────────────────────────────────────────
+  static const Color brandSeed = Color(0xFF0078D4); // Cobalt Blue
+  static const Color brandAccent = Color(0xFF2B88D8); // Vibrand Cobalt
 
-  // ── Neutrals ──────────────────────────────────────────────────────────────
-  static const Color surface = Color(0xFF0D0D14);
-  static const Color surfaceVariant = Color(0xFF12121E);
-  static const Color surfaceContainer = Color(0xFF1A1A2E);
+  // ── Neutrals (Premium Charcoal) ─────────────────────────────────────────
+  static const Color surface = Color(0xFF0F0F0F); // Very Dark Gray (Near Mica)
+  static const Color surfaceVariant = Color(0xFF141414); // Deep Charcoal
+  static const Color surfaceContainer = Color(0xFF1A1A1A); // Secondary
+  static const Color surfaceElevated = Color(0xFF202020); // Top elements
 
   // ── Semantic ──────────────────────────────────────────────────────────────
-  static const Color error = Color(0xFFFF5C7C);
-  static const Color success = Color(0xFF00E676);
-  static const Color warning = Color(0xFFFFAB40);
+  static const Color error = Color(0xFFE81123); // Windows Error Red
+  static const Color success = Color(0xFF107C10); // Windows Success Green
+  static const Color warning = Color(0xFFFFF100);
+
+  // ── Text ──────────────────────────────────────────────────────────────────
+  static const Color textPrimary = Color(0xFFFFFFFF);
+  static const Color textSecondary = Color(0xFF9E9E9E); // Subtle Gray
 
   // ── Glow & Effects ────────────────────────────────────────────────────────
-  static const Color glowPrimary = Color(0x557C4DFF);
-  static const Color glowAccent = Color(0x4D00E5FF);
+  static const Color glowPrimary = Color(0x330078D4);
+  static const Color glowAccent = Color(0x220078D4);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -45,6 +51,10 @@ class FlowyTheme {
         ColorScheme.fromSeed(
           seedColor: FlowyColors.brandSeed,
           brightness: Brightness.dark,
+          surface: FlowyColors.surface,
+          onSurface: FlowyColors.textPrimary,
+          primary: FlowyColors.brandSeed,
+          secondary: FlowyColors.brandAccent,
         );
 
     return ThemeData(
@@ -69,9 +79,9 @@ class FlowyTheme {
           systemNavigationBarColor: FlowyColors.surface,
           systemNavigationBarIconBrightness: Brightness.light,
         ),
-        titleTextStyle: GoogleFonts.outfit(
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
+        titleTextStyle: GoogleFonts.inter(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
           color: scheme.onSurface,
         ),
         iconTheme: IconThemeData(color: scheme.onSurface),
@@ -79,30 +89,32 @@ class FlowyTheme {
 
       // ── Card ────────────────────────────────────────────────────────────
       cardTheme: CardThemeData(
-        color: FlowyColors.surfaceContainer,
+        color: FlowyColors.surfaceVariant,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
         ),
         clipBehavior: Clip.antiAlias,
       ),
 
       // ── NavigationBar ───────────────────────────────────────────────────
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: FlowyColors.surfaceVariant.withOpacity(0.95),
-        indicatorColor: scheme.primary.withOpacity(0.2),
-        labelTextStyle: WidgetStateProperty.all(
-          GoogleFonts.outfit(
+        backgroundColor: FlowyColors.surface.withOpacity(0.95),
+        indicatorColor: Colors.transparent,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final isSelected = states.contains(WidgetState.selected);
+          return GoogleFonts.inter(
             fontSize: 11,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? Colors.white : FlowyColors.textSecondary,
+          );
+        }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return IconThemeData(color: scheme.primary, size: 24);
+            return const IconThemeData(color: Colors.white, size: 24);
           }
           return IconThemeData(
-              color: scheme.onSurface.withOpacity(0.5), size: 22);
+              color: FlowyColors.textSecondary, size: 22);
         }),
         elevation: 0,
         height: 70,
@@ -111,10 +123,10 @@ class FlowyTheme {
       // ── Slider ──────────────────────────────────────────────────────────
       sliderTheme: SliderThemeData(
         activeTrackColor: scheme.primary,
-        inactiveTrackColor: scheme.primary.withOpacity(0.2),
-        thumbColor: scheme.primary,
-        overlayColor: scheme.primary.withOpacity(0.15),
-        trackHeight: 3,
+        inactiveTrackColor: Colors.white.withOpacity(0.1),
+        thumbColor: Colors.white,
+        overlayColor: Colors.white.withOpacity(0.1),
+        trackHeight: 4,
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
       ),
 
@@ -122,101 +134,97 @@ class FlowyTheme {
       iconButtonTheme: IconButtonThemeData(
         style: ButtonStyle(
           foregroundColor:
-              WidgetStateProperty.all(scheme.onSurface.withOpacity(0.85)),
+              WidgetStateProperty.all(FlowyColors.textSecondary),
+          overlayColor: WidgetStateProperty.all(Colors.white.withOpacity(0.1)),
         ),
-      ),
-
-      // ── Page Transitions ────────────────────────────────────────────────
-      pageTransitionsTheme: const PageTransitionsTheme(
-        builders: {
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        },
       ),
     );
   }
 
   // ── Text Theme ─────────────────────────────────────────────────────────────
   static TextTheme _buildTextTheme(ColorScheme scheme) {
-    final baseTheme = GoogleFonts.outfitTextTheme();
+    // Segoe UI Variable fallback to Inter
+    final baseFont = GoogleFonts.inter(); 
+    final baseTheme = GoogleFonts.interTextTheme();
+    
     return baseTheme.copyWith(
       displayLarge: baseTheme.displayLarge?.copyWith(
         fontSize: 57,
-        fontWeight: FontWeight.w300,
+        fontWeight: FontWeight.w400,
         letterSpacing: -0.25,
-        color: scheme.onSurface,
+        color: FlowyColors.textPrimary,
       ),
       displayMedium: baseTheme.displayMedium?.copyWith(
         fontSize: 45,
-        fontWeight: FontWeight.w300,
-        color: scheme.onSurface,
+        fontWeight: FontWeight.w400,
+        color: FlowyColors.textPrimary,
       ),
       headlineLarge: baseTheme.headlineLarge?.copyWith(
         fontSize: 32,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w800,
         letterSpacing: -0.5,
-        color: scheme.onSurface,
+        color: FlowyColors.textPrimary,
       ),
       headlineMedium: baseTheme.headlineMedium?.copyWith(
         fontSize: 24,
-        fontWeight: FontWeight.w600,
-        color: scheme.onSurface,
+        fontWeight: FontWeight.w700,
+        color: FlowyColors.textPrimary,
       ),
       headlineSmall: baseTheme.headlineSmall?.copyWith(
         fontSize: 20,
-        fontWeight: FontWeight.w600,
-        color: scheme.onSurface,
+        fontWeight: FontWeight.w700,
+        color: FlowyColors.textPrimary,
       ),
       titleLarge: baseTheme.titleLarge?.copyWith(
         fontSize: 18,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
         letterSpacing: 0.1,
-        color: scheme.onSurface,
+        color: FlowyColors.textPrimary,
       ),
       titleMedium: baseTheme.titleMedium?.copyWith(
         fontSize: 16,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
         letterSpacing: 0.1,
-        color: scheme.onSurface,
+        color: FlowyColors.textPrimary,
       ),
       titleSmall: baseTheme.titleSmall?.copyWith(
         fontSize: 14,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
         letterSpacing: 0.1,
-        color: scheme.onSurface,
+        color: FlowyColors.textPrimary,
       ),
       bodyLarge: baseTheme.bodyLarge?.copyWith(
         fontSize: 16,
         fontWeight: FontWeight.w400,
-        color: scheme.onSurface.withOpacity(0.85),
+        color: FlowyColors.textPrimary,
       ),
       bodyMedium: baseTheme.bodyMedium?.copyWith(
         fontSize: 14,
         fontWeight: FontWeight.w400,
-        color: scheme.onSurface.withOpacity(0.75),
+        color: FlowyColors.textSecondary,
       ),
       bodySmall: baseTheme.bodySmall?.copyWith(
         fontSize: 12,
         fontWeight: FontWeight.w400,
-        color: scheme.onSurface.withOpacity(0.55),
+        color: FlowyColors.textSecondary,
       ),
       labelLarge: baseTheme.labelLarge?.copyWith(
         fontSize: 13,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
         letterSpacing: 0.1,
-        color: scheme.onSurface,
+        color: FlowyColors.textPrimary,
       ),
       labelMedium: baseTheme.labelMedium?.copyWith(
         fontSize: 11,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
         letterSpacing: 0.5,
-        color: scheme.onSurface.withOpacity(0.7),
+        color: FlowyColors.textSecondary,
       ),
       labelSmall: baseTheme.labelSmall?.copyWith(
         fontSize: 10,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
         letterSpacing: 0.5,
-        color: scheme.onSurface.withOpacity(0.5),
+        color: FlowyColors.textSecondary,
       ),
     );
   }
@@ -224,28 +232,30 @@ class FlowyTheme {
   // ── Glassmorphism Decoration ───────────────────────────────────────────────
   static BoxDecoration glassDecoration({
     double borderRadius = 20,
-    double opacity = 0.12,
+    double opacity = 0.08, // Subtle opacity for Mica/Acrylic feel
     Color? tintColor,
     double borderWidth = 0.5,
-    bool showShadow = false,
+    bool showShadow = true, // Default to true for premium depth
   }) {
     final tint = tintColor ?? Colors.white;
     return BoxDecoration(
       color: tint.withOpacity(opacity),
       borderRadius: BorderRadius.circular(borderRadius),
       border: Border.all(
-        color: tint.withOpacity(0.2),
+        color: tint.withOpacity(0.12), // Very subtle border
         width: borderWidth,
       ),
       boxShadow: showShadow
           ? [
               BoxShadow(
-                color: Colors.black.withOpacity(0.25),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
+                color: Colors.black.withOpacity(0.35),
+                blurRadius: 30,
+                spreadRadius: -5,
+                offset: const Offset(0, 10),
               ),
+              // Inner highlights simulation
               BoxShadow(
-                color: tint.withOpacity(0.05),
+                color: tint.withOpacity(0.03),
                 blurRadius: 1,
                 spreadRadius: -1,
                 offset: const Offset(0, 1),

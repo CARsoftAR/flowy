@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/flowy_marquee.dart';
 import '../../../../domain/entities/entities.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../library/presentation/providers/download_provider.dart';
@@ -41,9 +42,11 @@ class SongTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
+          debugPrint('🔘 Clic detectado en SongTile: ${song.title}');
           HapticFeedback.lightImpact();
           onTap();
         },
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(12),
         splashColor: scheme.primary.withOpacity(0.1),
         child: AnimatedContainer(
@@ -139,8 +142,8 @@ class SongTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      song.title,
+                    FlowyMarquee(
+                      text: song.title,
                       style: theme.textTheme.titleSmall?.copyWith(
                         color: isCurrentSong
                             ? scheme.primary
@@ -149,8 +152,6 @@ class SongTile extends StatelessWidget {
                             ? FontWeight.w600
                             : FontWeight.w500,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 3),
                     Text(

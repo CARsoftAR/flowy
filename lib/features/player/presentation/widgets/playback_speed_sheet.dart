@@ -17,13 +17,13 @@ class PlaybackSpeedSheet extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withOpacity(0.9),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        color: Color(0xFF0D0D14), // Solid dark background 
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.5),
+            color: Colors.black54,
             blurRadius: 40,
-            offset: const Offset(0, -10),
+            offset: Offset(0, -10),
           )
         ],
       ),

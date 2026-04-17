@@ -1,7 +1,7 @@
 name: flowy
 description: "Flowy - Premium Music Streaming Experience"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+5
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
@@ -73,6 +73,11 @@ dependencies:
   video_player: ^2.11.1
   chewie: ^1.13.0
   html_unescape: ^2.0.0
+  fl_chart: ^1.2.0
+  just_audio_media_kit: any
+  media_kit: any
+  media_kit_video: any
+  media_kit_libs_windows_video: any
 
 
 dev_dependencies:

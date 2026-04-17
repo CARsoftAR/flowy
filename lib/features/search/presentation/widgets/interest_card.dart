@@ -88,7 +88,7 @@ class _InterestCardState extends State<InterestCard> with SingleTickerProviderSt
                     opacity: 0.15,
                     child: FaIcon(
                       widget.icon,
-                      size: 90,
+                      size: 60,
                       color: Colors.white,
                     ),
                   ),
@@ -96,12 +96,12 @@ class _InterestCardState extends State<InterestCard> with SingleTickerProviderSt
                 
                 // Content
                 Padding(
-                  padding: const EdgeInsets.all(20.0),
+                  padding: const EdgeInsets.all(12.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.2),
                           shape: BoxShape.circle,
@@ -109,7 +109,7 @@ class _InterestCardState extends State<InterestCard> with SingleTickerProviderSt
                         child: FaIcon(
                           widget.icon, 
                           color: Colors.white, 
-                          size: 20
+                          size: 16
                         ),
                       ),
                       const Spacer(),
@@ -119,7 +119,7 @@ class _InterestCardState extends State<InterestCard> with SingleTickerProviderSt
                           widget.title,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 18,
+                            fontSize: 14,
                             fontWeight: FontWeight.w900,
                             letterSpacing: -0.5,
                           ),

@@ -18,19 +18,21 @@ class LyricsDataSource {
 
   String _cleanTitle(String title) {
     return title
-        .replaceAll(RegExp(r'\([^)]*\)|\[[^\]]*\]'), '')
-        .replaceAll(RegExp(r'official|video|audio|lyrics?|music', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\(Official.*?\)', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[Official.*?\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\((?:MV|Video|Audio|Lyrics)\)', caseSensitive: false), '')
+        .replaceAll(RegExp(r'official (?:video|audio|music video)', caseSensitive: false), '')
         .trim()
         .replaceAll(RegExp(r'\s+'), ' ');
   }
 
   Future<Either<Failure, LyricsEntity>> getLyrics(
-      String songId, String rawTitle, String artist) async {
+      String songId, String rawTitle, String artist, {Duration? expectedDuration}) async {
     final title = _cleanTitle(rawTitle);
     try {
       // Attempt 1: synced lyrics (LRC format)
       final syncedResult =
-          await _fetchSyncedLyrics(songId, title, artist);
+          await _fetchSyncedLyrics(songId, title, artist, expectedDuration);
       if (syncedResult != null) return Right(syncedResult);
 
       // Attempt 2: plain lyrics
@@ -44,7 +46,7 @@ class LyricsDataSource {
   }
 
   Future<LyricsEntity?> _fetchSyncedLyrics(
-      String songId, String title, String artist) async {
+      String songId, String title, String artist, Duration? expectedDuration) async {
     final uri = Uri.parse('$_lrclibBase/search').replace(queryParameters: {
       'q': '$title $artist',
     });
@@ -56,11 +58,35 @@ class LyricsDataSource {
     if (response.statusCode != 200) return null;
 
     final List<dynamic> json = jsonDecode(response.body);
+    
+    // Attempt to find the best match by duration
+    dynamic bestItem;
+    int minDiff = 999999;
+    
+    // Get actual song duration if available (e.g. from VideoEntity or MediaItem)
+    // We might need to pass duration to this method for better accuracy.
+    // For now, let's look for any synced lyrics.
+    
     for (final item in json) {
       final lrc = item['syncedLyrics'] as String?;
       if (lrc != null && lrc.isNotEmpty) {
-        return LyricsModel.fromLrc(songId, lrc).toEntity();
+        final lrcDuration = item['duration'] as num?;
+        
+        if (expectedDuration != null && lrcDuration != null) {
+          final diff = (lrcDuration.toInt() - expectedDuration.inSeconds).abs();
+          if (diff < minDiff) {
+            minDiff = diff;
+            bestItem = item;
+          }
+        } else if (bestItem == null) {
+          bestItem = item;
+        }
       }
+    }
+
+    if (bestItem != null) {
+      final lrc = bestItem['syncedLyrics'] as String;
+      return LyricsModel.fromLrc(songId, lrc).toEntity();
     }
     return null;
   }

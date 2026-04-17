@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'dart:ui';
-import 'package:flowy/core/constants/app_constants.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flowy/core/constants/app_constants.dart';
+import 'package:flowy/core/theme/ambient_background.dart';
+import '../../../../core/theme/app_theme.dart';
 
 class SplashPage extends StatefulWidget {
   final VoidCallback onFinish;
@@ -21,7 +22,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
   }
 
   void _startTransition() async {
-    await Future.delayed(const Duration(milliseconds: 3500));
+    await Future.delayed(const Duration(milliseconds: 3000));
     if (mounted) {
       widget.onFinish();
     }
@@ -34,39 +35,66 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+      body: AmbientBackground(
+        dominantColor: const Color(0xFF041C2C), // Matching the dark teal from the new image
+        child: Stack(
           children: [
-            Container(
-              width: size.width * 0.9,
-              child: Image.asset(
-                'assets/fondo_final.png',
-                fit: BoxFit.contain,
+            // ── Main Splash Image with Soft Blending ────────────────────
+            Positioned.fill(
+              child: Center(
+                child: ShaderMask(
+                  shaderCallback: (rect) {
+                    return RadialGradient(
+                      center: Alignment.center,
+                      radius: 1.8, // Radio mucho mayor para cubrir el ancho de un logo horizontal
+                      colors: [
+                        Colors.black,
+                        Colors.black.withOpacity(0.0),
+                      ],
+                      stops: const [0.8, 1.0], // Mantiene total opacidad en casi todo el logo
+                    ).createShader(rect);
+                  },
+                  blendMode: BlendMode.dstIn,
+                  child: Hero(
+                    tag: 'app_logo',
+                    child: Image.asset(
+                      'assets/flowy_elephant.png',
+                      width: size.width * 0.7, // Aumentado para dar espacio al texto FLOWY
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
               ),
-            ),
-            Transform.translate(
-              offset: const Offset(0, -20), // Si queremos que se superponga o esté muy cerca del Flowy
-              child: Text(
-                'v1.0.0',
-                style: GoogleFonts.nunito(
-                  color: const Color(0xFFE50914).withOpacity(0.9), // Rojo similar al de Flowy o gris: Colors.white54
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2.5,
+            ).animate()
+             .fadeIn(duration: 1500.ms)
+             .scale(begin: const Offset(1.05, 1.05), duration: 2500.ms, curve: Curves.easeOutCubic),
+
+            // ── Overlay Accents ──────────────────────────────────────────
+            Positioned(
+              bottom: 80,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Minimalistic Loading Progress
+                    SizedBox(
+                      width: 180,
+                      child: LinearProgressIndicator(
+                        backgroundColor: Colors.white.withOpacity(0.05),
+                        color: FlowyColors.brandAccent.withOpacity(0.4),
+                        minHeight: 1,
+                      ),
+                    ).animate().fadeIn(delay: 1200.ms),
+                  ],
                 ),
               ),
             ),
           ],
-        ).animate()
-          .fadeIn(duration: 800.ms)
-          .scale(
-            begin: const Offset(0.8, 0.8),
-            end: const Offset(1, 1),
-            duration: 1200.ms,
-            curve: Curves.easeOutCubic,
-          ),
+        ),
       ),
     );
   }
 }
+

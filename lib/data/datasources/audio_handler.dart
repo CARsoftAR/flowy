@@ -12,7 +12,7 @@ import '../../domain/repositories/repositories.dart';
 import 'package:rxdart/rxdart.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FlowyAudioHandler — v5 (Architected for Stability & Long-form content)
+// FlowyAudioHandler — v10 (Ultimate Windows Stabilization)
 // ─────────────────────────────────────────────────────────────────────────────
 
 typedef OnPlayerError = void Function(String message);
@@ -20,27 +20,26 @@ typedef OnPlayerError = void Function(String message);
 class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final MusicRepository _musicRepo;
   final Logger _log;
-
+  final SharedPreferences _prefs;
+  
   OnPlayerError? onError;
 
   List<SongEntity> _queue = [];
   int _currentIndex = 0;
   int _loadGeneration = 0;
-  int _consecutiveFailures = 0;
+  String? _lastResolvedUrl;
+  String? _lastResolvedId;
 
-  late final AudioPlayer _player1;
-  late final AudioPlayer _player2;
-  bool _usePlayer1 = true;
-  
-  AudioPlayer get _activePlayer => _usePlayer1 ? _player1 : _player2;
-  AudioPlayer get _inactivePlayer => _usePlayer1 ? _player2 : _player1;
-
-  AndroidEqualizer? _equalizer1;
-  AndroidEqualizer? _equalizer2;
-
+  late final AudioPlayer _player;
+  late final AudioPlayer _nextPlayer;
   final List<StreamSubscription> _subs = [];
-  final Map<String, String> _urlCache = {};
-  final SharedPreferences _prefs;
+  
+  File? _debugLog;
+  
+  double _crossfadeDuration = 0.0;
+  double _currentVolume = 1.0;
+  Timer? _crossfadeTimer;
+  bool _isCrossfading = false;
 
   FlowyAudioHandler({
     required MusicRepository musicRepository,
@@ -49,169 +48,135 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     this.onError,
   })  : _musicRepo = musicRepository,
         _prefs = sharedPreferences,
-        _log = logger ?? Logger(printer: PrettyPrinter(methodCount: 4)) {
-    _player1 = AudioPlayer();
-    _player2 = AudioPlayer();
+        _log = logger ?? Logger(printer: PrettyPrinter(methodCount: 0)) {
+    
+    _player = AudioPlayer();
+    _nextPlayer = AudioPlayer();
+    _initDebug();
     _attachListeners();
   }
 
-  static const MediaControl _favoriteOn = MediaControl(
-    androidIcon: 'drawable/ic_heart_filled',
-    label: 'Me gusta',
-    action: MediaAction.setRating,
-  );
-  
-  static const MediaControl _favoriteOff = MediaControl(
-    androidIcon: 'drawable/ic_heart',
-    label: 'Me gusta',
-    action: MediaAction.setRating,
-  );
-
-  double _crossfadeDuration = 0.0;
-  void setCrossfade(double seconds) => _crossfadeDuration = seconds;
-
-  void _attachListeners() {
-    _listenToPlayer(_player1);
-    _listenToPlayer(_player2);
+  Future<void> _initDebug() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      _debugLog = File('${dir.path}/player_debug.log');
+      await _writeDebug('--- HANDLER V10 START ---');
+    } catch (_) {}
   }
 
-  void _listenToPlayer(AudioPlayer player) {
-    _subs.add(player.playbackEventStream.listen(
+  Future<void> _writeDebug(String msg) async {
+    final now = DateTime.now().toLocal().toString().split(' ')[1];
+    final line = '[$now] $msg\n';
+    print('[DEBUG] $line');
+    try {
+      await _debugLog?.writeAsString(line, mode: FileMode.append);
+    } catch (_) {}
+  }
+
+  void _attachListeners() {
+    _subs.add(_player.playbackEventStream.listen(
       (event) {
-        if (player == _activePlayer) {
-          try {
-            playbackState.add(_buildPlaybackState(event, player));
-          } catch (e) {
-            _log.w('[AudioHandler] playbackState.add error: $e');
-          }
-        }
+        _updateState();
       },
-      onError: (Object e, StackTrace st) {
-        _log.e('[AudioHandler] PlaybackEventStream Error', error: e, stackTrace: st);
-        if (player == _activePlayer) {
-          onError?.call('Error de fuente de audio: $e');
-        }
-      },
+      onError: (Object e) => _writeDebug('Playback Stream Error: $e'),
     ));
 
-    _subs.add(player.processingStateStream.listen(
-      (state) {
-        if (player == _activePlayer && state == ProcessingState.completed) {
-          _log.d('[AudioHandler] Playback completed. Advancing.');
-          unawaited(_advanceToNext());
+    _subs.add(_player.processingStateStream.listen((state) {
+      _writeDebug('Native State: $state');
+      if (state == ProcessingState.completed) {
+        if (_player.loopMode == LoopMode.one) {
+          _player.seek(Duration.zero);
+          _player.play();
+          _updateState();
+        } else {
+          skipToNext();
         }
-      },
-      onError: (Object e, StackTrace st) {
-        _log.e('[AudioHandler] ProcessingStateStream Error', error: e, stackTrace: st);
-      },
-    ));
+      }
+      _updateState();
+    }));
 
-    _subs.add(player.positionStream.listen((pos) {
-      final songId = currentSong?.id;
-      // Precision saving for long tracks: Every 5 seconds
-      if (songId != null && pos.inSeconds > 5 && pos.inSeconds % 5 == 0) {
-        try {
-          _prefs.setInt('bookmark_$songId', pos.inSeconds);
-        } catch (_) {
-          // Ignorar errores de persistencia en tiempo real para no tumbar la app
+    _subs.add(_player.positionStream.listen((pos) {
+      if (pos.inSeconds % 5 == 0) _updateState();
+      if (pos == Duration.zero && _player.playing) {
+        _updateState();
+      }
+      if (_player.loopMode == LoopMode.one && pos.inSeconds > 0) {
+        final duration = _player.duration?.inSeconds ?? 0;
+        if (duration > 0 && pos.inSeconds >= duration - 1) {
+          _player.seek(Duration.zero);
         }
       }
       
-      if (player == _activePlayer && _crossfadeDuration > 0) {
-        final remaining = (player.duration ?? Duration.zero) - pos;
-        if (remaining.inMilliseconds > 0 && 
-            remaining.inMilliseconds <= (_crossfadeDuration * 1000) &&
-            _currentIndex < _queue.length - 1 &&
-            player.playing) {
-          _checkAndTriggerCrossfade(player);
+      // Crossfade logic
+      if (_crossfadeDuration > 0 && !_isCrossfading && _queue.length > 1) {
+        final duration = _player.duration?.inSeconds ?? 0;
+        if (duration > 0 && pos.inSeconds >= duration - _crossfadeDuration) {
+          _startCrossfade();
         }
       }
     }));
+
+    _subs.add(_player.positionStream.listen((pos) {
+      // Periodic update to ensure UI is synced
+      if (pos.inSeconds % 5 == 0) _updateState();
+    }));
   }
 
-  bool _isCrossfading = false;
-  void _checkAndTriggerCrossfade(AudioPlayer sourcePlayer) {
-    if (_isCrossfading) return;
-    _isCrossfading = true;
-    unawaited(_crossfadeToNext());
-  }
-
-  Future<void> _crossfadeToNext() async {
-    final oldPlayer = _activePlayer;
-    final nextIdx = _currentIndex + 1;
-    _usePlayer1 = !_usePlayer1;
-    _currentIndex = nextIdx;
-    await _loadAndPlay(_currentIndex, crossfadeFrom: oldPlayer);
-    _isCrossfading = false;
-  }
-
-  void reorderQueue(int oldIndex, int newIndex) {
-    if (newIndex > oldIndex) newIndex -= 1;
-    final item = _queue.removeAt(oldIndex);
-    _queue.insert(newIndex, item);
-
-    if (oldIndex == _currentIndex) {
-      _currentIndex = newIndex;
-    } else if (oldIndex < _currentIndex && newIndex >= _currentIndex) {
-      _currentIndex -= 1;
-    } else if (oldIndex > _currentIndex && newIndex <= _currentIndex) {
-      _currentIndex += 1;
-    }
-    _updateQueueMetadata();
-  }
-
-  Future<void> _advanceToNext() async {
-    if (_queue.isEmpty) return;
-    if (_currentIndex < _queue.length - 1) {
-      _currentIndex++;
-      await _loadAndPlay(_currentIndex);
+  void _updateState() {
+    try {
+      playbackState.add(PlaybackState(
+        controls: [
+          MediaControl.skipToPrevious,
+          if (_player.playing) MediaControl.pause else MediaControl.play,
+          MediaControl.skipToNext,
+        ],
+        systemActions: const { MediaAction.seek },
+        androidCompactActionIndices: const [0, 1, 2],
+        processingState: const {
+          ProcessingState.idle: AudioProcessingState.idle,
+          ProcessingState.loading: AudioProcessingState.loading,
+          ProcessingState.buffering: AudioProcessingState.buffering,
+          ProcessingState.ready: AudioProcessingState.ready,
+          ProcessingState.completed: AudioProcessingState.completed,
+        }[_player.processingState] ?? AudioProcessingState.idle,
+        playing: _player.playing,
+        updatePosition: _player.position,
+        bufferedPosition: _player.bufferedPosition,
+        speed: _player.speed,
+        queueIndex: _currentIndex,
+      ));
+    } catch (e) {
+      _writeDebug('State Update Fail: $e');
     }
   }
 
-  PlaybackState _buildPlaybackState(PlaybackEvent event, AudioPlayer player) {
-    final playing = player.playing;
-    final currentId = currentSong?.id;
-    final likedSongsJson = _prefs.getStringList('liked_songs') ?? [];
-    final isLiked = likedSongsJson.any((j) {
-      try {
-        return (jsonDecode(j)['id'] as String) == currentId;
-      } catch (_) {
-        return false;
-      }
-    });
-
-    return PlaybackState(
-      controls: [
-        isLiked ? _favoriteOn : _favoriteOff,
-        MediaControl.skipToPrevious,
-        if (playing) MediaControl.pause else MediaControl.play,
-        MediaControl.skipToNext,
-      ],
-      systemActions: const {
-        MediaAction.seek,
-        MediaAction.seekForward,
-        MediaAction.seekBackward,
-        MediaAction.setRating,
-      },
-      androidCompactActionIndices: const [0, 2, 3],
-      processingState: const {
-        ProcessingState.idle: AudioProcessingState.idle,
-        ProcessingState.loading: AudioProcessingState.loading,
-        ProcessingState.buffering: AudioProcessingState.buffering,
-        ProcessingState.ready: AudioProcessingState.ready,
-        ProcessingState.completed: AudioProcessingState.completed,
-      }[player.processingState] ?? AudioProcessingState.idle,
-      playing: playing,
-      updatePosition: player.position,
-      bufferedPosition: player.bufferedPosition,
-      speed: player.speed,
-      queueIndex: _currentIndex,
-    );
+  @override
+  Future<void> play() async {
+    _writeDebug('UI Command: PLAY');
+    await _player.setVolume(1.0);
+    _player.play(); // Don't await forever if it hangs
+    _updateState();
   }
 
-  // ── API ────────────────────────────────────────────────────────────────────
+  @override
+  Future<void> pause() async {
+    _writeDebug('UI Command: PAUSE');
+    await _player.pause();
+    _updateState();
+  }
 
+  @override
+  Future<void> stop() async {
+    _writeDebug('UI Command: STOP');
+    _loadGeneration++;
+    await _player.stop();
+    _updateState();
+    await super.stop();
+  }
+
+  @override
   Future<void> playSong(SongEntity song, {List<SongEntity>? playQueue}) async {
+    _writeDebug('Starting Song: ${song.title}');
     _queue = playQueue ?? [song];
     final idx = _queue.indexWhere((s) => s.id == song.id);
     _currentIndex = idx < 0 ? 0 : idx;
@@ -219,308 +184,251 @@ class FlowyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler 
     await _loadAndPlay(_currentIndex);
   }
 
-  @override
-  Future<void> play() async => _activePlayer.play();
+  Future<void> _loadAndPlay(int index) async {
+    final myGeneration = ++_loadGeneration;
+    final song = _queue[index];
 
-  @override
-  Future<void> pause() async => _activePlayer.pause();
+    _writeDebug('Preparing Track: ${song.title} | ID: ${song.id}');
+    
+    // Immediate UI update to show we are loading
+    mediaItem.add(MediaItem(
+      id: song.id,
+      title: song.title,
+      artist: song.artist,
+      duration: song.duration,
+      artUri: song.bestThumbnail.isNotEmpty ? Uri.tryParse(song.bestThumbnail) : null,
+    ));
+    _updateState();
 
-  @override
-  Future<void> stop() async {
-    _loadGeneration++;
-    _queue = [];
+    await _player.stop(); 
+
+    String? streamUrl;
     try {
-      await Future.wait([_player1.stop(), _player2.stop()]);
-    } catch (_) {}
-    await super.stop();
-  }
+      // Check if it's a direct stream (radio or external URL)
+      if (song.isDirectStream && song.streamUrl != null && song.streamUrl!.startsWith('http')) {
+        streamUrl = song.streamUrl;
+        _writeDebug('Using direct stream URL');
+      } else if (song.streamUrl != null && song.streamUrl!.startsWith('http')) {
+        // Already have a direct URL
+        streamUrl = song.streamUrl;
+      } else {
+        // Timeout aumentado a 25s — Invidious necesita hasta 15s para responder.
+        // Con 10s se cancelaba la llamada antes de tiempo, mostrando 'nada' al usuario.
+        final result = await _musicRepo.getStreamUrl(song.id, isVideo: song.isVideo)
+            .timeout(const Duration(seconds: 25));
+        streamUrl = result.getOrElse(() => throw Exception('No se pudo obtener URL del stream'));
+      }
+      _lastResolvedUrl = streamUrl;
+      _lastResolvedId = song.id;
+      customEvent.add({'type': 'url_resolved'});
+      _writeDebug('Stream Resolved Sucessfully');
+    } catch (e) {
+      final errorMsg = e.toString().contains('TimeoutException')
+          ? 'El servidor tardó demasiado. Probá refrescando el motor.'
+          : 'Error al obtener el audio: $e';
+      _writeDebug('❌ Resolution Error: $errorMsg');
+      print('ERROR DE CARGA: $errorMsg');
+      onError?.call(errorMsg);
+      return;
+    }
 
-  @override
-  Future<void> seek(Duration position) async => _activePlayer.seek(position);
+    // Check if it's an HLS stream (m3u8)
+    final isHls = streamUrl?.toLowerCase().contains('.m3u8') ?? false;
 
-  @override
-  Future<void> skipToNext() async {
-    if (_currentIndex < _queue.length - 1) {
-      _currentIndex++;
-      await _loadAndPlay(_currentIndex);
+    if (myGeneration != _loadGeneration) return;
+
+    try {
+      _writeDebug('Loading into Native Player...');
+      
+      _writeDebug('FINAL STREAM URL READY: $streamUrl');
+      print('URL FINAL DE AUDIO: $streamUrl');
+
+      final source = AudioSource.uri(
+        Uri.parse(streamUrl!),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+          'Accept': '*/*',
+          'Accept-Language': 'es-ES,es;q=0.9',
+          'Connection': 'keep-alive',
+        },
+      );
+      
+      if (isHls) {
+        _writeDebug('HLS Live Stream - Fire & Forget Activation');
+        
+        // No esperamos al setAudioSource porque en Windows/MediaKit puede 
+        // bloquearse analizando el manifest de YouTube.
+        _player.setAudioSource(source, preload: false); 
+
+        if (myGeneration != _loadGeneration) return;
+        
+        // Disparamos el play casi de inmediato. 
+        // El motor nativo se encargará del buffering internamente.
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (myGeneration == _loadGeneration) {
+            _player.play();
+            _updateState();
+            _writeDebug('HLS Play command sent (Background)');
+          }
+        });
+
+      } else {
+        _writeDebug('Standard File/Stream - Awaiting load');
+        await _player.setAudioSource(
+          source,
+          preload: true, // Cambiado a true para que falle rápido si hay 403
+        ).timeout(const Duration(seconds: 10)); // Timeout más agresivo para forzar error
+        
+        if (myGeneration != _loadGeneration) return;
+        
+        _writeDebug('Activating Audio...');
+        await _player.setVolume(1.0);
+        
+        // El play() también puede fallar si el stream se corta
+        _player.play().catchError((e) {
+          _writeDebug('Play execution fail: $e');
+          onError?.call('No se pudo iniciar el audio: $e');
+          return null;
+        }); 
+      }
+      
+      _updateState();
+      _writeDebug('Load sequence finished.');
+    } catch (e) {
+      _writeDebug('Native Player Fail: $e');
+      if (!isHls) {
+        onError?.call('Fallo del reproductor: El archivo no es reproducible.');
+      }
     }
   }
 
   @override
-  Future<void> skipToPrevious() async {
-    if (_activePlayer.position.inSeconds > 3) {
-      await seek(Duration.zero);
-    } else if (_currentIndex > 0) {
-      _currentIndex--;
-      await _loadAndPlay(_currentIndex);
-    }
-  }
-
+  Future<void> seek(Duration position) async => _player.seek(position);
   @override
-  Future<void> skipToQueueItem(int index) async {
-    if (index >= 0 && index < _queue.length) {
-      _currentIndex = index;
-      await _loadAndPlay(_currentIndex);
-    }
-  }
-
+  Future<void> skipToNext() async { if (_currentIndex < _queue.length - 1) { _currentIndex++; _loadAndPlay(_currentIndex); } }
   @override
-  Future<void> setRepeatMode(AudioServiceRepeatMode repeatMode) async {
-    final loop = switch (repeatMode) {
-      AudioServiceRepeatMode.one => LoopMode.one,
-      AudioServiceRepeatMode.all => LoopMode.all,
-      _ => LoopMode.off,
-    };
-    await Future.wait([
-      _player1.setLoopMode(loop),
-      _player2.setLoopMode(loop),
-    ]);
-    await super.setRepeatMode(repeatMode);
+  Future<void> skipToPrevious() async { if (_player.position.inSeconds > 5) { seek(Duration.zero); } else if (_currentIndex > 0) { _currentIndex--; _loadAndPlay(_currentIndex); } }
+  @override
+  Future<void> skipToQueueItem(int index) async { if (index >= 0 && index < _queue.length) { _currentIndex = index; _loadAndPlay(_currentIndex); } }
+  @override
+  Future<void> setRepeatMode(AudioServiceRepeatMode rm) async {
+    final loop = switch (rm) { AudioServiceRepeatMode.one => LoopMode.one, AudioServiceRepeatMode.all => LoopMode.all, _ => LoopMode.off };
+    await _player.setLoopMode(loop);
   }
-
-  Future<void> setSpeed(double speed) async {
-    await Future.wait([
-      _player1.setSpeed(speed),
-      _player2.setSpeed(speed),
-    ]);
-  }
+  
+  Future<void> setSpeed(double speed) async => _player.setSpeed(speed);
+  Future<void> setVolume(double volume) async => _player.setVolume(volume);
 
   @override
   Future<void> setRating(Rating rating, [Map<String, dynamic>? extras]) async {
     final song = currentSong;
     if (song == null) return;
-
-    final likedSongsJson = _prefs.getStringList('liked_songs') ?? [];
-    final index = likedSongsJson.indexWhere((j) {
-      try {
-        return (jsonDecode(j)['id'] as String) == song.id;
-      } catch (_) {
-        return false;
-      }
-    });
-
-    if (index >= 0) {
-      likedSongsJson.removeAt(index);
-    } else {
-      likedSongsJson.insert(0, jsonEncode(SongModel.fromEntity(song).toJson()));
-    }
-
-    await _prefs.setStringList('liked_songs', likedSongsJson);
-    customEvent.add({'type': 'favorite_toggled', 'songId': song.id, 'isLiked': index < 0});
-    _updateCurrentMediaItem(song);
-    playbackState.add(_buildPlaybackState(_activePlayer.playbackEvent, _activePlayer));
-  }
-
-  // ── Core Loading ──────────────────────────────────────────────────────────
-
-  Future<void> _loadAndPlay(int index, {AudioPlayer? crossfadeFrom}) async {
-    final myGeneration = ++_loadGeneration;
-    final song = _queue[index];
-
-    _log.i('[AudioEngine] Loading gen #$myGeneration › "${song.title}"');
     
-    // Mandatory reset/stop for the player we are about to use
-    final player = _activePlayer;
-    await player.stop(); // Ensura it's clean
+    // Trigger the same logic as UI toggle
+    customEvent.add({'type': 'favorite_toggled', 'songId': song.id});
+  }
 
-    _updateCurrentMediaItem(song);
-
-    if (crossfadeFrom != null) {
-      _fadeVolume(crossfadeFrom, 1.0, 0.0, _crossfadeDuration);
-    } else {
-      _inactivePlayer.stop();
-    }
-
-    // Resolve URL
-    String? streamUrl;
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final localFile = File('${dir.path}/downloads/${song.id}.mp3');
-      
-      bool isLocal = false;
-      if (await localFile.exists()) {
-        streamUrl = localFile.uri.toString();
-        isLocal = true;
-      } else {
-        final result = await _musicRepo.getStreamUrl(song.id, isVideo: song.isVideo).timeout(const Duration(seconds: 15));
-        streamUrl = result.getOrElse(() => throw Exception('URL failed'));
-      }
-      _urlCache[song.id] = streamUrl;
-      customEvent.add({'type': 'url_resolved', 'songId': song.id});
-    } catch (e) {
-      _log.e('[AudioEngine] URL Resolution Error: $e');
-      _consecutiveFailures++;
-      
-      final isLast = index >= _queue.length - 1;
-      if (isLast || _consecutiveFailures >= 3) {
-        final reason = _consecutiveFailures >= 3 
-            ? 'No se pudieron obtener URLs de stream. YouTube puede estar bloqueando la petición.' 
-            : 'No se pudo obtener la URL de reproducción.';
-        onError?.call(reason);
-        _consecutiveFailures = 0;
-      } else {
-        _log.w('[AudioEngine] Skipping to next due to URL failure ($_consecutiveFailures consecutive)');
-        _tryNext(myGeneration, index);
-      }
-      return;
-    }
-
-    if (myGeneration != _loadGeneration) return;
-
-    try {
-      player.setVolume(crossfadeFrom != null ? 0.0 : 1.0);
-
-      // Solo aplicar headers si es una URL de red (HTTP/HTTPS)
-      // Esto evita errores de PlatformException al intentar leer archivos locales con headers web
-      final isNetwork = streamUrl.startsWith('http');
-      
-      await player.setAudioSource(
-        AudioSource.uri(
-          Uri.parse(streamUrl), 
-          tag: _buildMediaItem(song),
-          headers: isNetwork ? {
-            // Un User-Agent de dispositivo móvil genérico pero moderno es lo más seguro
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36',
-          } : null,
-        ),
-        preload: true,
-      ).timeout(const Duration(seconds: 25)); // Aumentado para podcasts pesados
-
-      if (myGeneration != _loadGeneration) return;
-
-      // Handle Bookmark Resume Prompt
-      final savedSeconds = _prefs.getInt('bookmark_${song.id}');
-      if (savedSeconds != null && savedSeconds > 10) {
-        customEvent.add({
-          'type': 'request_resume',
-          'songId': song.id,
-          'seconds': savedSeconds,
-          'title': song.title
-        });
-      }
-
-      await player.play();
-      _consecutiveFailures = 0; // Reset on success
-
-      if (crossfadeFrom != null) {
-        _fadeVolume(player, 0.0, 1.0, _crossfadeDuration);
-      }
-    } catch (e) {
-      _log.e('[AudioEngine] Player Error: $e');
-      _consecutiveFailures++;
-      
-      final isLast = index >= _queue.length - 1;
-      if (isLast || _consecutiveFailures >= 3) {
-        final reason = _consecutiveFailures >= 3 
-            ? 'Múltiples temas fallaron al cargar. Verifica tu conexión.' 
-            : 'Error de reproducción: $e';
-        onError?.call(reason);
-        _consecutiveFailures = 0; // Reset after reporting
-      } else {
-        // Report skip to UI silently or via logs
-        _log.w('[AudioEngine] Skipping to next due to failure ($_consecutiveFailures consecutive)');
-        _tryNext(myGeneration, index);
-      }
+  void reorderQueue(int old, int next) { if (next > old) next -= 1; final item = _queue.removeAt(old); _queue.insert(next, item); _updateQueueMetadata(); }
+  void setQueue(List<SongEntity> queue, int startIndex) {
+    _queue = List.from(queue);
+    _currentIndex = startIndex;
+    _updateQueueMetadata();
+    if (_queue.isNotEmpty && _currentIndex >= 0 && _currentIndex < _queue.length) {
+      final song = _queue[_currentIndex];
+      mediaItem.add(MediaItem(
+        id: song.id,
+        title: song.title,
+        artist: song.artist,
+        duration: song.duration,
+        artUri: Uri.tryParse(song.thumbnailUrl ?? ''),
+      ));
     }
   }
-
-  void _fadeVolume(AudioPlayer player, double from, double to, double durationSec) {
-    if (durationSec <= 0) {
-      player.setVolume(to);
-      return;
-    }
-    const steps = 10;
-    final interval = (durationSec * 1000) / steps;
-    final stepSize = (to - from) / steps;
-    double currentVolume = from;
-
-    Timer.periodic(Duration(milliseconds: interval.toInt()), (timer) {
-      currentVolume += stepSize;
-      if ((stepSize > 0 && currentVolume >= to) || (stepSize < 0 && currentVolume <= to)) {
-        player.setVolume(to);
-        timer.cancel();
-        if (to == 0.0) player.stop();
-      } else {
-        player.setVolume(currentVolume);
-      }
-    });
-  }
-
-  void _tryNext(int generation, int failedIndex) {
-    if (generation != _loadGeneration) return;
-    if (failedIndex < _queue.length - 1) {
-      Future.delayed(const Duration(milliseconds: 1000), () {
-        if (generation == _loadGeneration) {
-          _currentIndex = failedIndex + 1;
-          unawaited(_loadAndPlay(_currentIndex));
-        }
-      });
-    }
-  }
-
-  void _updateCurrentMediaItem(SongEntity song) {
-    mediaItem.add(_buildMediaItem(song));
-  }
-
-  MediaItem _buildMediaItem(SongEntity song) {
-    final likedSongsJson = _prefs.getStringList('liked_songs') ?? [];
-    final isLiked = likedSongsJson.any((j) {
-      try {
-        return (jsonDecode(j)['id'] as String) == song.id;
-      } catch (_) {
-        return false;
-      }
-    });
-
-    return MediaItem(
-      id: song.id,
-      title: song.title,
-      artist: song.artist,
-      album: song.album,
-      duration: song.duration,
-      rating: Rating.newHeartRating(isLiked),
-      artUri: song.bestThumbnail.isNotEmpty ? Uri.tryParse(song.bestThumbnail) : null,
-      extras: {
-        'source': 'youtube',
-        'isVideo': song.isVideo,
-      },
-    );
-  }
-
-  void _updateQueueMetadata() {
-    queue.add(_queue.map(_buildMediaItem).toList());
-  }
-
-  // ── Equalizer ──────────────────────────────────────────────────────────────
+  void _updateQueueMetadata() { queue.add(_queue.map((s) => MediaItem(id: s.id, title: s.title, artist: s.artist, duration: s.duration)).toList()); }
   
-  Future<List<AndroidEqualizerBand>> getEqualizerBands() async {
-    return (await _equalizer1?.parameters)?.bands ?? [];
+  void setCrossfade(double duration) {
+    _crossfadeDuration = duration;
   }
-
-  Future<void> setEqualizerBandGain(int bandIndex, double gain) async {
+  
+  Future<void> _startCrossfade() async {
+    if (_isCrossfading || _currentIndex >= _queue.length - 1) return;
+    
+    _isCrossfading = true;
+    _writeDebug('Starting crossfade to next song');
+    
+    final nextIndex = _currentIndex + 1;
+    final nextSong = _queue[nextIndex];
+    
     try {
-      if (_equalizer1 != null) (_equalizer1 as dynamic).setBandGain(bandIndex, gain);
-      if (_equalizer2 != null) (_equalizer2 as dynamic).setBandGain(bandIndex, gain);
-    } catch (_) {}
+      await _nextPlayer.setUrl(nextSong.streamUrl ?? '');
+      await _nextPlayer.setVolume(0.0);
+      await _nextPlayer.play();
+      
+      // Fade out current, fade in next
+      final steps = 20;
+      final stepDuration = (_crossfadeDuration * 1000 / steps).round();
+      
+      for (int i = 0; i <= steps; i++) {
+        final progress = i / steps;
+        final volume1 = _currentVolume * (1 - progress);
+        final volume2 = _currentVolume * progress;
+        
+        await _player.setVolume(volume1);
+        await _nextPlayer.setVolume(volume2);
+        
+        await Future.delayed(Duration(milliseconds: stepDuration));
+      }
+      
+      // Swap players
+      final tempPlayer = _player;
+      _player = _nextPlayer;
+      _nextPlayer = tempPlayer;
+      
+      _currentIndex = nextIndex;
+      _updateQueueMetadata();
+      _updateState();
+      
+      // Prepare next song for next crossfade
+      await _prepareNextForCrossfade();
+      
+    } catch (e) {
+      _writeDebug('Crossfade error: $e');
+      _isCrossfading = false;
+    }
   }
-
-  Future<void> setEqualizerEnabled(bool enabled) async {
-    if (_equalizer1 != null) await _equalizer1!.setEnabled(enabled);
-    if (_equalizer2 != null) await _equalizer2!.setEnabled(enabled);
+  
+  Future<void> _prepareNextForCrossfade() async {
+    if (_currentIndex >= _queue.length - 1) return;
+    
+    final nextIndex = _currentIndex + 1;
+    final nextSong = _queue[nextIndex];
+    
+    try {
+      await _nextPlayer.setUrl(nextSong.streamUrl ?? '');
+      _isCrossfading = false;
+    } catch (e) {
+      _writeDebug('Prepare next error: $e');
+      _isCrossfading = false;
+    }
   }
-
-  Stream<Duration> get positionStream => _activePlayer.positionStream;
-  Stream<Duration> get bufferedPositionStream => _activePlayer.bufferedPositionStream;
-  Stream<bool> get playingStream => _activePlayer.playingStream;
-  Duration get position => _activePlayer.position;
+  
+  Future<List<dynamic>> getEqualizerBands() async => [];
+  Future<void> setEqualizerBandGain(int i, double g) async {}
+  Future<void> setEqualizerEnabled(bool e) async {}
+  String? getCachedUrl(String id) {
+    if (id == _lastResolvedId) return _lastResolvedUrl;
+    return null;
+  }
+  Stream<Duration> get positionStream => _player.positionStream;
+  Duration get position => _player.position;
   SongEntity? get currentSong => _queue.isNotEmpty && _currentIndex < _queue.length ? _queue[_currentIndex] : null;
   List<SongEntity> get currentQueue => List.unmodifiable(_queue);
   int get currentQueueIndex => _currentIndex;
-  String? getCachedUrl(String songId) => _urlCache[songId];
-
-  Future<void> dispose() async {
-    _loadGeneration++;
-    for (final sub in _subs) { sub.cancel(); }
-    await Future.wait([_player1.dispose(), _player2.dispose()]);
+  Future<void> dispose() async { 
+    _loadGeneration++; 
+    _crossfadeTimer?.cancel();
+    for (final sub in _subs) { sub.cancel(); } 
+    await _player.dispose();
+    await _nextPlayer.dispose();
   }
 }

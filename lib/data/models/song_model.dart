@@ -15,6 +15,7 @@ extension VideoToSongEntity on Video {
       thumbnailUrl: thumbnails.mediumResUrl,
       highResThumbnailUrl: thumbnails.maxResUrl,
       duration: duration ?? Duration.zero,
+      isLive: isLive,
     );
   }
 }
@@ -41,7 +42,8 @@ extension SearchVideoToSongEntity on SearchVideo {
 
   Duration _parseDurationString(String dur) {
     try {
-      final parts = dur.split(':').map(int.parse).toList();
+      final cleanDur = dur.replaceFirst('-', ''); // Handle negative strings
+      final parts = cleanDur.split(':').map(int.parse).toList();
       if (parts.length == 3) {
         return Duration(hours: parts[0], minutes: parts[1], seconds: parts[2]);
       } else if (parts.length == 2) {
@@ -159,22 +161,28 @@ class LyricsModel {
   /// Parse LRC format lyrics.
   static LyricsModel fromLrc(String songId, String lrcContent) {
     final lines = <LyricLineModel>[];
-    final regex = RegExp(r'\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)');
-
     for (final line in lrcContent.split('\n')) {
-      final match = regex.firstMatch(line.trim());
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+
+      // Matches [mm:ss.xx] or [mm:ss.xxx] or [mm:ss] or [m:ss.x]
+      final regex = RegExp(r'\[(\d+):(\d{2})(?:[\.:](\d+))?\](.*)');
+      final match = regex.firstMatch(trimmed);
+      
       if (match != null) {
-        final minutes = int.parse(match.group(1)!);
-        final seconds = int.parse(match.group(2)!);
-        final centis = int.parse(match.group(3)!.padRight(3, '0'));
+        final m = int.parse(match.group(1)!);
+        final s = int.parse(match.group(2)!);
+        final msStr = match.group(3) ?? '0';
         final text = match.group(4)?.trim() ?? '';
 
+        // Handle milliseconds/centiseconds intelligently (e.g. .5 -> 500, .50 -> 500, .05 -> 050)
+        int ms = 0;
+        if (msStr.length == 1) ms = int.parse(msStr) * 100;
+        if (msStr.length == 2) ms = int.parse(msStr) * 10;
+        if (msStr.length >= 3) ms = int.parse(msStr.substring(0, 3));
+
         lines.add(LyricLineModel(
-          timestamp: Duration(
-            minutes: minutes,
-            seconds: seconds,
-            milliseconds: centis,
-          ),
+          timestamp: Duration(minutes: m, seconds: s, milliseconds: ms),
           text: text,
         ));
       }

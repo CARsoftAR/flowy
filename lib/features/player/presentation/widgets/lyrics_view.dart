@@ -60,6 +60,7 @@ class _LyricsViewState extends State<LyricsView> {
       widget.song.id,
       widget.song.title,
       widget.song.artist,
+      expectedDuration: widget.song.duration,
     );
 
     if (!mounted) return;
@@ -97,9 +98,9 @@ class _LyricsViewState extends State<LyricsView> {
     if (!_itemScrollController.isAttached) return;
     _itemScrollController.scrollTo(
       index: _currentLineIndex,
-      duration: const Duration(milliseconds: 800),
-      curve: Curves.fastLinearToSlowEaseIn,
-      alignment: 0.3, 
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      alignment: 0.4, 
     );
   }
 
@@ -183,7 +184,7 @@ class _LyricsViewState extends State<LyricsView> {
                   final line = lyrics.lines[index];
 
                   return AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 800),
+                    duration: const Duration(milliseconds: 300),
                     curve: Curves.easeOutCubic,
                     style: TextStyle(
                       fontSize: fontSize,
@@ -205,9 +206,8 @@ class _LyricsViewState extends State<LyricsView> {
                         ),
                       ),
                     ).animate(target: isActive ? 1 : 0)
-                     .fadeIn(duration: 800.ms, curve: Curves.easeOutSine)
-                     .scale(begin: const Offset(1, 1), end: Offset(scaleEnd, scaleEnd), duration: 800.ms)
-                     .blur(begin: const Offset(5, 5), end: const Offset(0, 0), duration: 800.ms),
+                     .fadeIn(duration: 300.ms, curve: Curves.easeOutSine)
+                     .scale(begin: const Offset(1, 1), end: Offset(scaleEnd, scaleEnd), duration: 300.ms),
                   );
                 },
               ),

@@ -17,6 +17,8 @@ class SongEntity extends Equatable {
   final String? streamUrl;
   final bool isLocal;
   final bool isVideo;
+  final bool isLive;
+  final bool isDirectStream; // Para radios - stream directo, no de YouTube
   final Map<String, dynamic>? extras;
 
   const SongEntity({
@@ -31,6 +33,8 @@ class SongEntity extends Equatable {
     this.streamUrl,
     this.isLocal = false,
     this.isVideo = false,
+    this.isLive = false,
+    this.isDirectStream = false,
     this.extras,
   });
 
@@ -55,6 +59,8 @@ class SongEntity extends Equatable {
     String? streamUrl,
     bool? isLocal,
     bool? isVideo,
+    bool? isLive,
+    bool? isDirectStream,
     Map<String, dynamic>? extras,
   }) {
     return SongEntity(
@@ -69,6 +75,8 @@ class SongEntity extends Equatable {
       streamUrl: streamUrl ?? this.streamUrl,
       isLocal: isLocal ?? this.isLocal,
       isVideo: isVideo ?? this.isVideo,
+      isLive: isLive ?? this.isLive,
+      isDirectStream: isDirectStream ?? this.isDirectStream,
       extras: extras ?? this.extras,
     );
   }
@@ -82,6 +90,7 @@ class SongEntity extends Equatable {
         thumbnailUrl,
         duration,
         streamUrl,
+        isDirectStream,
       ];
 }
 
@@ -95,6 +104,8 @@ class PlaylistEntity extends Equatable {
   final String? author;
   final int? trackCount;
   final List<SongEntity> tracks;
+  final bool isFolder;
+  final List<PlaylistEntity> subPlaylists;
 
   const PlaylistEntity({
     required this.id,
@@ -104,10 +115,36 @@ class PlaylistEntity extends Equatable {
     this.author,
     this.trackCount,
     this.tracks = const [],
+    this.isFolder = false,
+    this.subPlaylists = const [],
   });
 
+  PlaylistEntity copyWith({
+    String? id,
+    String? title,
+    String? description,
+    String? thumbnailUrl,
+    String? author,
+    int? trackCount,
+    List<SongEntity>? tracks,
+    bool? isFolder,
+    List<PlaylistEntity>? subPlaylists,
+  }) {
+    return PlaylistEntity(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      author: author ?? this.author,
+      trackCount: trackCount ?? this.trackCount,
+      tracks: tracks ?? this.tracks,
+      isFolder: isFolder ?? this.isFolder,
+      subPlaylists: subPlaylists ?? this.subPlaylists,
+    );
+  }
+
   @override
-  List<Object?> get props => [id, title, author, trackCount];
+  List<Object?> get props => [id, title, author, trackCount, isFolder, subPlaylists];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -35,10 +35,7 @@ class LibraryProvider with ChangeNotifier {
   int getPlayCount(String id) => _playCounts[id] ?? 0;
 
   double getBookmarkProgress(String songId, Duration totalDuration) {
-    if (totalDuration.inSeconds == 0) return 0.0;
-    final seconds = _prefs.getInt('bookmark_$songId') ?? 0;
-    if (seconds <= 10) return 0.0;
-    return (seconds / totalDuration.inSeconds).clamp(0.0, 1.0);
+    return 0.0;
   }
 
   void refreshData() {
@@ -71,15 +68,194 @@ class LibraryProvider with ChangeNotifier {
 
   // --- Playlist Management ---
 
-  Future<void> createPlaylist(String title, {String? description}) async {
+  Future<String> createPlaylist(String title, {String? description, String? parentFolderId}) async {
+    final id = const Uuid().v4();
     final playlist = PlaylistEntity(
-      id: const Uuid().v4(),
+      id: id,
       title: title,
       description: description,
       tracks: const [],
     );
-    _playlists.add(playlist);
+    
+    if (parentFolderId == null) {
+      _playlists.add(playlist);
+    } else {
+      _addItemToFolder(_playlists, parentFolderId, playlist);
+    }
     await _savePlaylists();
+    return id;
+  }
+
+  Future<String> createFolder(String title, {String? parentFolderId}) async {
+    final id = const Uuid().v4();
+    final folder = PlaylistEntity(
+      id: id,
+      title: title,
+      isFolder: true,
+      subPlaylists: const [],
+    );
+    
+    if (parentFolderId == null) {
+      _playlists.add(folder);
+    } else {
+      _addItemToFolder(_playlists, parentFolderId, folder);
+    }
+    await _savePlaylists();
+    return id;
+  }
+
+  bool _addItemToFolder(List<PlaylistEntity> list, String folderId, PlaylistEntity item) {
+    for (int i = 0; i < list.length; i++) {
+      if (list[i].id == folderId) {
+        final sub = List<PlaylistEntity>.from(list[i].subPlaylists)..add(item);
+        list[i] = _copyWithSub(list[i], sub).copyWith(isFolder: true);
+        return true;
+      }
+      if (list[i].isFolder || list[i].subPlaylists.isNotEmpty) {
+        final sub = List<PlaylistEntity>.from(list[i].subPlaylists);
+        if (_addItemToFolder(sub, folderId, item)) {
+          list[i] = _copyWithSub(list[i], sub).copyWith(isFolder: true);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  Future<void> movePlaylistToFolder(String playlistId, String? folderId) async {
+    if (playlistId == folderId) return;
+
+    PlaylistEntity? itemToMove;
+    PlaylistEntity? findItem(List<PlaylistEntity> list, String id) {
+      for (var p in list) {
+        if (p.id == id) return p;
+        if (p.isFolder) {
+          final res = findItem(p.subPlaylists, id);
+          if (res != null) return res;
+        }
+      }
+      return null;
+    }
+
+    itemToMove = findItem(_playlists, playlistId);
+    if (itemToMove == null) return;
+
+    bool removeFromList(List<PlaylistEntity> list, String id) {
+      for (int i = 0; i < list.length; i++) {
+        if (list[i].id == id) {
+          list.removeAt(i);
+          return true;
+        }
+        if (list[i].isFolder) {
+          final sub = List<PlaylistEntity>.from(list[i].subPlaylists);
+          if (removeFromList(sub, id)) {
+            list[i] = _copyWithSub(list[i], sub);
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    removeFromList(_playlists, playlistId);
+
+    if (folderId == null) {
+      _playlists.add(itemToMove);
+    } else {
+      _addItemToFolder(_playlists, folderId, itemToMove);
+    }
+
+    await _savePlaylists();
+  }
+
+  PlaylistEntity _copyWithSub(PlaylistEntity p, List<PlaylistEntity> sub) {
+    return PlaylistEntity(
+      id: p.id,
+      title: p.title,
+      description: p.description,
+      thumbnailUrl: p.thumbnailUrl,
+      author: p.author,
+      trackCount: p.trackCount,
+      tracks: p.tracks,
+      isFolder: p.isFolder,
+      subPlaylists: sub,
+    );
+  }
+
+  Future<void> importPlaylist(PlaylistEntity playlist, {String? parentFolderId}) async {
+    // Cache all songs so they can be retrieved by ID
+    for (final song in playlist.tracks) {
+      _idToSong[song.id] = song;
+    }
+
+    // Fallback to first track's thumbnail if playlist thumbnail is null
+    String? thumbUrl = playlist.thumbnailUrl;
+    if (thumbUrl == null && playlist.tracks.isNotEmpty) {
+      thumbUrl = playlist.tracks.first.bestThumbnail;
+    }
+
+    if (parentFolderId != null) {
+      // If we are importing into an empty folder, merge it instead of nesting
+      if (_mergeIntoEmptyFolder(_playlists, parentFolderId, playlist, thumbUrl)) {
+        await _savePlaylists();
+        return;
+      }
+    }
+
+    final isMix = playlist.id.startsWith('RD');
+    final defaultDesc = isMix 
+        ? 'Mix dinámico basado en ${playlist.tracks.isNotEmpty ? playlist.tracks.first.artist : "YouTube"}'
+        : 'Importada desde YouTube';
+
+    final newPlaylist = PlaylistEntity(
+      id: const Uuid().v4(),
+      title: playlist.title,
+      description: (playlist.description == null || playlist.description!.isEmpty)
+          ? defaultDesc 
+          : playlist.description,
+      thumbnailUrl: thumbUrl,
+      author: 'YouTube',
+      trackCount: playlist.tracks.length,
+      tracks: playlist.tracks,
+    );
+    
+    if (parentFolderId == null) {
+      _playlists.add(newPlaylist);
+    } else {
+      _addItemToFolder(_playlists, parentFolderId, newPlaylist);
+    }
+    
+    await _savePlaylists();
+  }
+
+  bool _mergeIntoEmptyFolder(List<PlaylistEntity> list, String folderId, PlaylistEntity data, String? thumbUrl) {
+    for (int i = 0; i < list.length; i++) {
+      if (list[i].id == folderId) {
+        // Only merge if the folder is essentially empty (placeholder) 
+        // OR if it has songs/subs but we want to append? 
+        // User reports "empty folder", so let's check for emptiness.
+        if (list[i].tracks.isEmpty && list[i].subPlaylists.isEmpty) {
+          list[i] = list[i].copyWith(
+            title: list[i].title == 'Nueva Playlist' ? data.title : list[i].title, // Keep user title if they custom-named it
+            description: data.description ?? 'Importada desde YouTube',
+            thumbnailUrl: thumbUrl ?? list[i].thumbnailUrl,
+            tracks: data.tracks,
+            trackCount: data.tracks.length,
+            isFolder: false, // Convert to playlist since it now has tracks
+          );
+          return true;
+        }
+        return false;
+      }
+      if (list[i].isFolder) {
+        final sub = List<PlaylistEntity>.from(list[i].subPlaylists);
+        if (_mergeIntoEmptyFolder(sub, folderId, data, thumbUrl)) {
+          list[i] = _copyWithSub(list[i], sub);
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   Future<void> deletePlaylist(String id) async {
@@ -88,45 +264,68 @@ class LibraryProvider with ChangeNotifier {
   }
 
   Future<void> addSongToPlaylist(String playlistId, SongEntity song) async {
-    final index = _playlists.indexWhere((p) => p.id == playlistId);
-    if (index == -1) return;
+    bool found = false;
+    void searchAndAdd(List<PlaylistEntity> list) {
+      for (int i = 0; i < list.length; i++) {
+        if (list[i].id == playlistId && !list[i].isFolder) {
+          if (!list[i].tracks.any((s) => s.id == song.id)) {
+            final updatedTracks = List<SongEntity>.from(list[i].tracks)..add(song);
+            list[i] = PlaylistEntity(
+              id: list[i].id,
+              title: list[i].title,
+              description: list[i].description,
+              thumbnailUrl: list[i].thumbnailUrl ?? song.thumbnailUrl,
+              author: list[i].author,
+              trackCount: updatedTracks.length,
+              tracks: updatedTracks,
+            );
+          }
+          found = true;
+          return;
+        }
+        if (list[i].isFolder) {
+          final sub = List<PlaylistEntity>.from(list[i].subPlaylists);
+          searchAndAdd(sub);
+          list[i] = _copyWithSub(list[i], sub);
+          if (found) return;
+        }
+      }
+    }
 
-    final playlist = _playlists[index];
-    if (playlist.tracks.any((s) => s.id == song.id)) return;
-
-    final updatedTracks = List<SongEntity>.from(playlist.tracks)..add(song);
-    _playlists[index] = PlaylistEntity(
-      id: playlist.id,
-      title: playlist.title,
-      description: playlist.description,
-      thumbnailUrl: playlist.thumbnailUrl ?? song.thumbnailUrl,
-      author: playlist.author,
-      trackCount: updatedTracks.length,
-      tracks: updatedTracks,
-    );
-
-    await _savePlaylists();
+    searchAndAdd(_playlists);
+    if (found) await _savePlaylists();
   }
 
   Future<void> removeSongFromPlaylist(String playlistId, String songId) async {
-    final index = _playlists.indexWhere((p) => p.id == playlistId);
-    if (index == -1) return;
+    bool found = false;
+    void searchAndRemove(List<PlaylistEntity> list) {
+      for (int i = 0; i < list.length; i++) {
+        if (list[i].id == playlistId && !list[i].isFolder) {
+          final updatedTracks = List<SongEntity>.from(list[i].tracks)
+              ..removeWhere((s) => s.id == songId);
+          list[i] = PlaylistEntity(
+            id: list[i].id,
+            title: list[i].title,
+            description: list[i].description,
+            thumbnailUrl: updatedTracks.isNotEmpty ? updatedTracks.first.thumbnailUrl : null,
+            author: list[i].author,
+            trackCount: updatedTracks.length,
+            tracks: updatedTracks,
+          );
+          found = true;
+          return;
+        }
+        if (list[i].isFolder) {
+          final sub = List<PlaylistEntity>.from(list[i].subPlaylists);
+          searchAndRemove(sub);
+          list[i] = _copyWithSub(list[i], sub);
+          if (found) return;
+        }
+      }
+    }
 
-    final playlist = _playlists[index];
-    final updatedTracks = List<SongEntity>.from(playlist.tracks)
-      ..removeWhere((s) => s.id == songId);
-
-    _playlists[index] = PlaylistEntity(
-      id: playlist.id,
-      title: playlist.title,
-      description: playlist.description,
-      thumbnailUrl: updatedTracks.isNotEmpty ? updatedTracks.first.thumbnailUrl : null,
-      author: playlist.author,
-      trackCount: updatedTracks.length,
-      tracks: updatedTracks,
-    );
-
-    await _savePlaylists();
+    searchAndRemove(_playlists);
+    if (found) await _savePlaylists();
   }
 
   Future<void> _savePlaylists() async {

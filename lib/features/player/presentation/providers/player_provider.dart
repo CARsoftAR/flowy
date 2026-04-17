@@ -5,7 +5,7 @@ import '../../../../domain/repositories/repositories.dart';
 import '../../../../data/datasources/audio_handler.dart';
 import '../../../../core/theme/app_theme.dart';
 
-enum RepeatMode { off, one, all }
+enum FlowyRepeatMode { off, one, all }
 
 enum PlayerStatus { idle, loading, playing, paused, error }
 
@@ -19,12 +19,14 @@ class PlayerProvider extends ChangeNotifier {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _isShuffle = false;
-  RepeatMode _repeatMode = RepeatMode.off;
+  List<SongEntity>? _originalQueue;
+  int _originalIndex = 0;
+  FlowyRepeatMode _repeatMode = FlowyRepeatMode.off;
   double _playbackSpeed = 1.0;
+  double _volume = 1.0;
   String? _errorMessage;
   // Flag para bloquear el stream mientras se ejecuta stop()
   bool _isStopping = false;
-  Map<String, dynamic>? _resumeRequest;
   Color _dominantColor = const Color(0xFF1DB954); // Default Spotify Green
 
   PlayerProvider({
@@ -51,13 +53,13 @@ class PlayerProvider extends ChangeNotifier {
   bool get isPlaying => _status == PlayerStatus.playing;
   bool get isLoading => _status == PlayerStatus.loading;
   bool get isShuffle => _isShuffle;
-  RepeatMode get repeatMode => _repeatMode;
+  FlowyRepeatMode get repeatMode => _repeatMode;
   double get playbackSpeed => _playbackSpeed;
+  double get volume => _volume;
   Color get dominantColor => _dominantColor;
   String? get errorMessage => _errorMessage;
   FlowyAudioHandler get handler => _handler;
   bool get hasError => _status == PlayerStatus.error && _errorMessage != null;
-  Map<String, dynamic>? get resumeRequest => _resumeRequest;
 
   double get progress {
     if (_duration.inMilliseconds == 0) return 0.0;
@@ -83,12 +85,13 @@ class PlayerProvider extends ChangeNotifier {
     });
 
     _handler.playbackState.listen((state) {
-      // Si estamos en proceso de stop, no restaurar el estado desde el stream
       if (_isStopping) return;
 
       final nextSong = _handler.currentSong;
-      if (nextSong?.id != _currentSong?.id) {
+      
+      if (nextSong?.id != _currentSong?.id || state.processingState == AudioProcessingState.completed) {
         _currentSong = nextSong;
+        _position = Duration.zero;
         _updateDominantColor();
       }
 
@@ -121,9 +124,6 @@ class PlayerProvider extends ChangeNotifier {
     _handler.customEvent.listen((event) {
       if (event is Map<String, dynamic>) {
         if (event['type'] == 'favorite_toggled') {
-          notifyListeners();
-        } else if (event['type'] == 'request_resume') {
-          _resumeRequest = event;
           notifyListeners();
         } else if (event['type'] == 'url_resolved') {
           notifyListeners();
@@ -200,8 +200,12 @@ class PlayerProvider extends ChangeNotifier {
 
   Future<void> togglePlayPause() async {
     if (isPlaying) {
+      _status = PlayerStatus.paused;
+      notifyListeners();
       await _handler.pause();
     } else {
+      _status = PlayerStatus.loading;
+      notifyListeners();
       await _handler.play();
     }
   }
@@ -235,11 +239,6 @@ class PlayerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void clearResumeRequest() {
-    _resumeRequest = null;
-    notifyListeners();
-  }
-
   Future<void> skipToNext() => _handler.skipToNext();
   Future<void> skipToPrevious() => _handler.skipToPrevious();
   Future<void> seekTo(Duration position) => _handler.seek(position);
@@ -250,23 +249,51 @@ class PlayerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setVolume(double vol) async {
+    _volume = vol;
+    await _handler.setVolume(vol);
+    notifyListeners();
+  }
+
   void toggleShuffle() {
+    if (!_isShuffle) {
+      final currentSong = _handler.currentSong;
+      if (currentSong != null && _handler.currentQueue.isNotEmpty) {
+        _originalQueue = List.from(_handler.currentQueue);
+        _originalIndex = _handler.currentQueueIndex;
+        
+        final shuffledQueue = List<SongEntity>.from(_handler.currentQueue)..shuffle();
+        final currentIndexInShuffled = shuffledQueue.indexWhere((s) => s.id == currentSong.id);
+        if (currentIndexInShuffled != -1) {
+          shuffledQueue.removeAt(currentIndexInShuffled);
+        }
+        shuffledQueue.insert(0, currentSong);
+        
+        _handler.setQueue(shuffledQueue, 0);
+      }
+    } else {
+      if (_originalQueue != null) {
+        _handler.setQueue(_originalQueue!, _originalIndex);
+        _originalQueue = null;
+      }
+    }
+    
     _isShuffle = !_isShuffle;
     notifyListeners();
   }
 
   void cycleRepeatMode() {
     switch (_repeatMode) {
-      case RepeatMode.off:
-        _repeatMode = RepeatMode.one;
+      case FlowyRepeatMode.off:
+        _repeatMode = FlowyRepeatMode.one;
         _handler.setRepeatMode(AudioServiceRepeatMode.one);
         break;
-      case RepeatMode.one:
-        _repeatMode = RepeatMode.all;
+      case FlowyRepeatMode.one:
+        _repeatMode = FlowyRepeatMode.all;
         _handler.setRepeatMode(AudioServiceRepeatMode.all);
         break;
-      case RepeatMode.all:
-        _repeatMode = RepeatMode.off;
+      case FlowyRepeatMode.all:
+        _repeatMode = FlowyRepeatMode.off;
         _handler.setRepeatMode(AudioServiceRepeatMode.none);
         break;
     }

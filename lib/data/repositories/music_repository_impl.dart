@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:dartz/dartz.dart';
+import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import '../../core/errors/failures.dart';
+import '../../services/flowy_engine.dart';
 import '../../domain/entities/entities.dart';
 import '../../domain/repositories/repositories.dart';
 import '../models/song_model.dart';
@@ -42,27 +45,68 @@ class MusicRepositoryImpl implements MusicRepository {
 
   @override
   FutureEither<SearchResultEntity> search(String query) async {
+    // ── PRIMARY SEARCH: Invidious API (Dynamic) ────────────────────────────────
     try {
-      final initialResults = await _yt.search.search(query).timeout(const Duration(seconds: 10));
-      
-      // Fetch up to 100 items (approx 5 pages) to satisfy "maximum possible" request
-      final allVideos = await _fetchExtended(initialResults, 100);
-      
-      final songs = allVideos
-          .map((v) => v.toSongEntity())
-          .where((s) => _isValidVideoId(s.id)) // ENFORCE VALID IDS
-          .toList();
+      final baseUrl = FlowyEngine.currentApiUrl;
+      final uri = Uri.parse(
+          '$baseUrl/api/v1/search?q=${Uri.encodeComponent(query)}&type=video');
+
+      _log.d('Searching via Invidious: $baseUrl');
+
+      // HEADERS OBLIGATORIOS PARA EVITAR BLOQUEOS
+      final response = await http.get(
+        uri,
+        headers: {
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/119.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        final List<SongEntity> songs = data.map((item) {
+          String? thumb;
+          if (item['videoThumbnails'] != null &&
+              (item['videoThumbnails'] as List).isNotEmpty) {
+            thumb = item['videoThumbnails'][0]['url'];
+          }
+          return SongEntity(
+            id: item['videoId'] ?? '',
+            title: item['title'] ?? 'Sin título',
+            artist: item['author'] ?? 'Artista desconocido',
+            thumbnailUrl: thumb,
+            duration: Duration(seconds: item['lengthSeconds'] ?? 0),
+          );
+        }).where((s) {
+          if (!_isValidVideoId(s.id)) return false;
+          // FILTRO ANTI-COMPILACIONES: Excluir videos de más de 15 minutos
+          final maxDuration = const Duration(minutes: 15);
+          if (s.duration > maxDuration) return false;
+          return true;
+        }).toList();
+
+        _log.i('Invidious search OK: ${songs.length} results');
+        return Right(SearchResultEntity(query: query, songs: songs));
+      }
+    } catch (e) {
+      _log.w('Invidious search failed: $e. Falling back to native.');
+    }
+
+    // ── FALLBACK SEARCH: YoutubeExplode (Native) ─────────────────────────────
+    try {
+      final initialResults =
+          await _yt.search.search(query).timeout(const Duration(seconds: 10));
+      final allElements = await _fetchExtended(initialResults, 100);
+      final songs = _mapToSongList(allElements);
 
       return Right(SearchResultEntity(query: query, songs: songs));
     } on TimeoutException {
-      _log.e('YouTube search timed out for $query');
-      return Left(YoutubeFailure('Search timed out. Check your connection.'));
-    } on YoutubeExplodeException catch (e) {
-      _log.e('YouTube search failed', error: e);
-      return Left(YoutubeFailure('Search failed: ${e.message}'));
+      return Left(YoutubeFailure('La búsqueda tardó demasiado. Reintenta.'));
     } catch (e) {
-      _log.e('Unknown search error', error: e);
-      return Left(UnknownFailure('Search error', e));
+      _log.e('Search error: $e');
+      return Left(
+          UnknownFailure('Servidor de búsqueda ocupado o error de red.'));
     }
   }
 
@@ -70,8 +114,29 @@ class MusicRepositoryImpl implements MusicRepository {
 
   @override
   FutureEither<List<String>> getSearchSuggestions(String query) async {
+    // ── PRIMARY SUGGESTIONS: Invidious API (Dynamic) ──────────────────────────
     try {
-      final results = await _yt.search.getQuerySuggestions(query).timeout(const Duration(seconds: 5));
+      final baseUrl = FlowyEngine.currentApiUrl;
+      final uri = Uri.parse(
+          '$baseUrl/api/v1/suggestions?q=${Uri.encodeComponent(query)}');
+
+      final response = await http.get(uri).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map && data.containsKey('suggestions')) {
+          final suggestions = List<String>.from(data['suggestions']);
+          return Right(suggestions);
+        }
+      }
+    } catch (e) {
+      _log.w('Invidious suggestions failed: $e');
+    }
+
+    // ── FALLBACK SUGGESTIONS: YoutubeExplode (Native) ─────────────────────────
+    try {
+      final results = await _yt.search
+          .getQuerySuggestions(query)
+          .timeout(const Duration(seconds: 5));
       return Right(results);
     } catch (e) {
       return Left(YoutubeFailure('Suggestions failed'));
@@ -81,44 +146,280 @@ class MusicRepositoryImpl implements MusicRepository {
   // ── Stream URL ────────────────────────────────────────────────────────────
 
   @override
-  FutureEither<String> getStreamUrl(String videoId, {bool isVideo = false}) async {
+  FutureEither<String> getStreamUrl(String videoId,
+      {bool isVideo = false}) async {
     if (!_isValidVideoId(videoId)) {
-      _log.e('Invalid YouTube video ID: $videoId');
       return Left(YoutubeFailure('Invalid video ID format'));
     }
 
-    // NO cachear URLs de stream: expiranrápidamente (YouTube las firma con timestamp)
-    // La caché guardaba URLs ya throttleadas y las reutilizaba.
+    // ── MOTOR 1: Invidious /latest_version (Proxy Real) ──────────────────────
+    // Priorizamos la antena de Chile (nadeko) que es la más sana hoy.
+    try {
+      final baseUrl = FlowyEngine.currentApiUrl;
+      _log.d('Invidious: Intentando con $baseUrl para $videoId');
 
-    // Intentar con múltiples estrategias de extracción
-    for (final strategy in _getStrategies(isVideo)) {
-      final result = await strategy(videoId);
-      if (result != null) {
-        // NO guardar en caché - las URLs expiran y vienen throttleadas
-        return Right(result);
+      final metaRes = await http.get(
+        Uri.parse('$baseUrl/api/v1/videos/$videoId'),
+        headers: {
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 5));
+
+      if (metaRes.statusCode == 200) {
+        final data = json.decode(metaRes.body);
+        int? bestItag;
+
+        final adaptiveFormats = data['adaptiveFormats'] as List<dynamic>?;
+        if (adaptiveFormats != null) {
+          // Prioridad: audio/mp4 (AAC — codec nativo Android, siempre suena)
+          final mp4Audio = adaptiveFormats.where((f) {
+            final type = f['type']?.toString() ?? '';
+            return type.contains('audio') && type.contains('mp4');
+          }).toList();
+
+          if (mp4Audio.isNotEmpty) {
+            mp4Audio.sort((a, b) => ((b['bitrate'] as num?)?.toInt() ?? 0)
+                .compareTo((a['bitrate'] as num?)?.toInt() ?? 0));
+            bestItag = mp4Audio.first['itag'] as int?;
+            _log.d('Invidious: itag MP4/AAC → $bestItag');
+          }
+
+          // Fallback: audio/webm (Opus)
+          if (bestItag == null) {
+            final webmAudio = adaptiveFormats.where((f) {
+              final type = f['type']?.toString() ?? '';
+              return type.contains('audio') && type.contains('webm');
+            }).toList();
+            if (webmAudio.isNotEmpty) {
+              webmAudio.sort((a, b) => ((b['bitrate'] as num?)?.toInt() ?? 0)
+                  .compareTo((a['bitrate'] as num?)?.toInt() ?? 0));
+              bestItag = webmAudio.first['itag'] as int?;
+              _log.d('Invidious: itag WebM/Opus → $bestItag');
+            }
+          }
+        }
+
+        if (bestItag != null) {
+          // URL correcta del proxy Invidious — el servidor sirve el audio directamente
+          final proxyUrl =
+              '$baseUrl/latest_version?id=$videoId&itag=$bestItag&local=true';
+          print('URL FINAL DE AUDIO: $proxyUrl');
+          _log.i('Invidious Proxy OK → $proxyUrl');
+          return Right(proxyUrl);
+        }
       }
+    } catch (e) {
+      _log.w('Invidious falló: $e. Usando YoutubeExplode como fallback.');
     }
 
+    // ── MOTOR 2: YoutubeExplode (Fallback Nativo) ────────────────────────────
+    _log.d('YoutubeExplode: Intentando extracción nativa para $videoId');
+
+    bool isLiveStream = false;
+    Duration? videoDuration;
+    try {
+      final video =
+          await _yt.videos.get(videoId).timeout(const Duration(seconds: 10));
+      isLiveStream = video.isLive;
+      videoDuration = video.duration;
+    } catch (e) {
+      _log.w('Native metadata failed: $e');
+    }
+
+    if (isLiveStream ||
+        videoDuration == null ||
+        videoDuration == Duration.zero) {
+      final nativeUrl = await _getHttpLiveStreamUrl(videoId);
+      if (nativeUrl != null) return Right(nativeUrl);
+      final hlsUrl = await _getLiveStreamUrl(videoId);
+      if (hlsUrl != null) return Right(hlsUrl);
+      return Left(StreamFailure('No se pudo obtener URL de stream en vivo.',
+          videoId: videoId));
+    }
+
+    for (final strategy in _getStrategies(isVideo)) {
+      final result = await strategy(videoId);
+      if (result != null) return Right(result);
+    }
+
+    final hlsLastResort = await _getLiveStreamUrl(videoId);
+    if (hlsLastResort != null) return Right(hlsLastResort);
+
     return Left(StreamFailure(
-      'No se pudo obtener URL de stream. La pista puede ser restringida.',
+      'No se pudo conectar con el motor de streaming. Verificá tu conexión.',
       videoId: videoId,
     ));
   }
 
+  Future<String?> _getHttpLiveStreamUrl(String videoId) async {
+    try {
+      _log.d('Trying getHttpLiveStreamUrl for: $videoId');
+      final url = await _yt.videos.streamsClient
+          .getHttpLiveStreamUrl(VideoId(videoId))
+          .timeout(const Duration(seconds: 15));
+      if (url.isNotEmpty) {
+        _log.d('Got Native Live URL: ${url.substring(0, 50)}...');
+        return url;
+      }
+    } catch (e) {
+      _log.w('getHttpLiveStreamUrl failed: $e');
+    }
+    return null;
+  }
+
+  // ── MOTOR PIPED: API alternativa más estable ───────────────────────────────
+  Future<String?> _getPipedStreamUrl(String videoId) async {
+    // Piped instances list
+    final pipedInstances = [
+      'https://pipedapi.kavin.rocks',
+      'https://api.piped.yt',
+      'https://pipedapi.adminforge.de',
+      'https://pipedapi.lunar.icu',
+    ];
+
+    for (final instance in pipedInstances) {
+      try {
+        _log.d('Piped: Intentando instancia $instance');
+
+        // Get streams from Piped API
+        final response = await http.get(
+          Uri.parse('$instance/streams/$videoId'),
+          headers: {
+            'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0',
+          },
+        ).timeout(const Duration(seconds: 12));
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+
+          // Find audio stream
+          final audioStreams = data['audioStreams'] as List<dynamic>?;
+          if (audioStreams != null && audioStreams.isNotEmpty) {
+            // Get the best quality audio - find highest bitrate
+            int maxBitrate = 0;
+            Map<String, dynamic>? bestAudio;
+            for (var stream in audioStreams) {
+              final bitrate = (stream['bitrate'] as num?)?.toInt() ?? 0;
+              if (bitrate > maxBitrate) {
+                maxBitrate = bitrate;
+                bestAudio = stream as Map<String, dynamic>;
+              }
+            }
+
+            if (bestAudio != null) {
+              final url = bestAudio['url'] as String?;
+              if (url != null && url.isNotEmpty) {
+                _log.d('Piped OK: $instance → audio');
+                return url;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        _log.w('Piped instance $instance failed: $e');
+      }
+    }
+    return null;
+  }
+
+  Future<String?> _getLiveStreamUrl(String videoId) async {
+    // Método Primario: getHttpLiveStreamUrl (Oficial para Live)
+    try {
+      _log.d('Primary Live Extraction for: $videoId');
+      final url = await _yt.videos.streamsClient
+          .getHttpLiveStreamUrl(VideoId(videoId))
+          .timeout(const Duration(seconds: 20));
+
+      if (url.isNotEmpty) {
+        _log.d('Got Primary HLS URL');
+        return url;
+      }
+    } catch (e) {
+      _log.w('Primary extraction failed: $e');
+    }
+
+    // Método Secundario: Manifest con Clientes específicos
+    final clients = [YoutubeApiClient.tv, YoutubeApiClient.ios];
+    for (final client in clients) {
+      try {
+        _log.d('Secondary extraction with $client for: $videoId');
+        final manifest = await _yt.videos.streamsClient.getManifest(videoId,
+            ytClients: [client]).timeout(const Duration(seconds: 15));
+
+        if (manifest.hls.isNotEmpty) {
+          final url = manifest.hls.first.url.toString();
+          if (url.isNotEmpty) return url;
+        }
+      } catch (e) {
+        _log.w('Fallback $client failed: $e');
+      }
+    }
+    return null;
+  }
+
   List<Future<String?> Function(String)> _getStrategies(bool isVideo) {
-    if (isVideo) {
+    // Grupo rápido (ejecutar en paralelo)
+    if (!isVideo) {
       return [
-        _tryMuxedVideo,
-        _tryAnyVideo,
-        _tryAndroidVrClient, // Fallback video
+        _tryTvClientFast, // Timeout 8s
+        _tryAndroidVrFast, // Timeout 8s
       ];
     }
     return [
-      _tryAndroidVrClient, // Android VR is very stable for audio
-      _tryIosClient,       // iOS is good for bypassing some restrictions
-      _tryAndroidClient,   // Regular Android
+      _tryTvClientFast,
+      _tryAndroidVrFast,
+      _tryIosClient,
+      _tryAndroidClient,
       _tryAnyAudio,
     ];
+  }
+
+  // estrategias rápidas (8s timeout, en paralelo)
+  Future<String?> _tryTvClientFast(String videoId) async {
+    try {
+      _log.d('Strategy: TV for $videoId');
+      final manifest = await _yt.videos.streamsClient.getManifest(videoId,
+          ytClients: [YoutubeApiClient.tv]).timeout(const Duration(seconds: 8));
+
+      final stream = manifest.audioOnly.withHighestBitrate();
+      return stream.url.toString();
+    } catch (e) {
+      _log.w('TV failed: $e');
+    }
+    return null;
+  }
+
+  Future<String?> _tryAndroidVrFast(String videoId) async {
+    try {
+      _log.d('Strategy: Android VR for $videoId');
+      final manifest = await _yt.videos.streamsClient.getManifest(videoId,
+          ytClients: [
+            YoutubeApiClient.androidVr
+          ]).timeout(const Duration(seconds: 8));
+
+      final stream = manifest.audioOnly.withHighestBitrate();
+      return stream.url.toString();
+    } catch (e) {
+      _log.w('AndroidVR failed: $e');
+    }
+    return null;
+  }
+
+  Future<String?> _tryTvClient(String videoId) async {
+    try {
+      _log.d('Strategy: TV for $videoId');
+      final manifest = await _yt.videos.streamsClient.getManifest(videoId,
+          ytClients: [YoutubeApiClient.tv]).timeout(const Duration(seconds: 8));
+
+      final stream = manifest.audioOnly.withHighestBitrate();
+      return stream.url.toString();
+    } catch (e) {
+      _log.w('TV strategy failed: $e');
+    }
+    return null;
   }
 
   Future<String?> _tryMuxedVideo(String videoId) async {
@@ -151,8 +452,8 @@ class MusicRepositoryImpl implements MusicRepository {
     try {
       _log.d('Strategy: iOS client for $videoId');
       final manifest = await _yt.videos.streamsClient
-          .getManifest(videoId, ytClients: [YoutubeApiClient.ios])
-          .timeout(const Duration(seconds: 15));
+          .getManifest(videoId, ytClients: [YoutubeApiClient.ios]).timeout(
+              const Duration(seconds: 15));
 
       final stream = manifest.audioOnly.withHighestBitrate();
       return stream.url.toString();
@@ -167,8 +468,8 @@ class MusicRepositoryImpl implements MusicRepository {
     try {
       _log.d('Estrategia Android para $videoId');
       final manifest = await _yt.videos.streamsClient
-          .getManifest(videoId, ytClients: [YoutubeApiClient.android])
-          .timeout(const Duration(seconds: 15));
+          .getManifest(videoId, ytClients: [YoutubeApiClient.android]).timeout(
+              const Duration(seconds: 15));
 
       final stream = manifest.audioOnly
               .where((s) => s.container.name == 'm4a')
@@ -177,7 +478,8 @@ class MusicRepositoryImpl implements MusicRepository {
           manifest.audioOnly.sortByBitrate().lastOrNull;
 
       if (stream != null) {
-        _log.d('Estrategia Android OK: ${stream.container.name} ${stream.bitrate}');
+        _log.d(
+            'Estrategia Android OK: ${stream.container.name} ${stream.bitrate}');
         return stream.url.toString();
       }
     } catch (e) {
@@ -186,14 +488,14 @@ class MusicRepositoryImpl implements MusicRepository {
     return null;
   }
 
-
   /// Estrategia: Android VR (altamente estable para streams de audio)
   Future<String?> _tryAndroidVrClient(String videoId) async {
     try {
       _log.d('Strategy: Android VR for $videoId');
-      final manifest = await _yt.videos.streamsClient
-          .getManifest(videoId, ytClients: [YoutubeApiClient.androidVr])
-          .timeout(const Duration(seconds: 15));
+      final manifest = await _yt.videos.streamsClient.getManifest(videoId,
+          ytClients: [
+            YoutubeApiClient.androidVr
+          ]).timeout(const Duration(seconds: 15));
 
       final stream = manifest.audioOnly.withHighestBitrate();
       return stream.url.toString();
@@ -208,8 +510,8 @@ class MusicRepositoryImpl implements MusicRepository {
     try {
       _log.d('Estrategia 3 (any audio) para $videoId');
       final manifest = await _yt.videos.streamsClient
-          .getManifest(videoId, ytClients: [YoutubeApiClient.ios])
-          .timeout(const Duration(seconds: 15));
+          .getManifest(videoId, ytClients: [YoutubeApiClient.ios]).timeout(
+              const Duration(seconds: 15));
 
       if (manifest.audioOnly.isNotEmpty) {
         final stream = manifest.audioOnly.first;
@@ -227,24 +529,101 @@ class MusicRepositoryImpl implements MusicRepository {
   @override
   FutureEither<PlaylistEntity> getPlaylist(String playlistId) async {
     try {
-      final playlistFuture = _yt.playlists.get(playlistId);
-      final videosFuture =
-          _yt.playlists.getVideos(playlistId).take(100).toList();
+      String actualPlaylistId = playlistId;
+      String? seedVideoId;
 
-      final results = await Future.wait([playlistFuture, videosFuture]);
-      final playlist = results[0] as Playlist;
-      final videos = results[1] as List;
+      if (playlistId.contains('|')) {
+        final parts = playlistId.split('|');
+        actualPlaylistId = parts[0];
+        seedVideoId = parts[1];
+      }
 
-      final songs =
-          videos.cast<Video>()
-          .map((v) => v.toSongEntity())
-          .where((s) => _isValidVideoId(s.id)) // ENFORCE VALID IDS
-          .toList();
+      Playlist? playlist;
+      try {
+        playlist = await _yt.playlists
+            .get(actualPlaylistId)
+            .timeout(const Duration(seconds: 15));
+      } catch (e) {
+        _log.w('Could not fetch playlist metadata for $actualPlaylistId: $e');
+      }
 
-      return Right(playlist.toEntity(tracks: songs));
+      List<Video> videos = [];
+      try {
+        videos = await _yt.playlists
+            .getVideos(actualPlaylistId)
+            .take(100)
+            .toList()
+            .timeout(const Duration(seconds: 15));
+      } catch (e) {
+        _log.w('Could not fetch playlist videos for $actualPlaylistId: $e');
+      }
+
+      List<SongEntity> songs = _mapToSongList(videos);
+
+      // Fallback for YouTube Mixes (IDs starting with RD)
+      if (songs.isEmpty && actualPlaylistId.startsWith('RD')) {
+        _log.i(
+            'Detected possible Mix ID $actualPlaylistId with 0 tracks. Attempting fallback.');
+
+        // Use the last 11 characters as the seed video ID (standard for RD mixes)
+        seedVideoId ??= actualPlaylistId.length >= 13
+            ? actualPlaylistId.substring(actualPlaylistId.length - 11)
+            : null;
+
+        if (seedVideoId != null && _isValidVideoId(seedVideoId)) {
+          _log.d('Trying to get content for seed video $seedVideoId');
+          try {
+            // Include the seed video itself first
+            final seedVideo = await _yt.videos
+                .get(seedVideoId!)
+                .timeout(const Duration(seconds: 10));
+
+            // Get related videos - using fetchExtended to get up to 60 tracks (good balance for home/import)
+            final related = await _yt.videos.getRelatedVideos(seedVideo);
+            final List<dynamic> extendedList =
+                await _fetchExtended(related, 60);
+
+            final List<dynamic> rawList = [seedVideo, ...extendedList];
+            songs = _mapToSongList(rawList);
+          } catch (e) {
+            _log.w('Fallback for mix failed: $e');
+          }
+        }
+      }
+
+      if (songs.isEmpty && playlist == null) {
+        return const Left(YoutubeFailure(
+            'No se pudieron encontrar temas en esta lista. Verificá que sea pública.'));
+      }
+
+      // If we have no playlist object (common for RD mixes), create a descriptive entity
+      String title = playlist?.title ??
+          (actualPlaylistId.startsWith('RD')
+              ? 'Mix de YouTube'
+              : 'Lista Importada');
+
+      // If it's a mix and we have songs, try to make the title better
+      if (actualPlaylistId.startsWith('RD') &&
+          songs.isNotEmpty &&
+          playlist == null) {
+        title =
+            'Mix: ${songs.first.artist}'; // Usually mixes are based on an artist/song
+      }
+
+      final entity = playlist?.toEntity(tracks: songs) ??
+          PlaylistEntity(
+            id: actualPlaylistId,
+            title: title,
+            tracks: songs,
+            trackCount: songs.length,
+            thumbnailUrl: songs.isNotEmpty ? songs.first.bestThumbnail : null,
+          );
+
+      return Right(entity);
     } catch (e) {
       _log.e('Playlist fetch failed: $playlistId', error: e);
-      return Left(YoutubeFailure('Playlist unavailable'));
+      return const Left(
+          YoutubeFailure('No se pudo cargar la lista. Reintenta más tarde.'));
     }
   }
 
@@ -253,40 +632,43 @@ class MusicRepositoryImpl implements MusicRepository {
   @override
   FutureEither<List<SongEntity>> getRecommendations() async {
     try {
-      // Buscar música tendencia global como proxy para recomendaciones
-      final initialResults = await _yt.search
-          .search('las mejores canciones pop 2026', filter: TypeFilters.video);
-      
-      // Fetch at least 60 items for home screen
-      final allVideos = await _fetchExtended(initialResults, 60);
+      _log.d('Fetching recommendations via Dynamic Engine...');
+      // Usamos el método search que ya está ruteado por Invidious/FlowyEngine
+      final result = await search('top global hits 2026');
 
-      final songs = allVideos
-          .map((v) => v.toSongEntity())
-          .where((s) => _isValidVideoId(s.id)) // ENFORCE VALID IDS
-          .toList();
-      return Right(songs);
+      return result.fold(
+        (failure) => Left(failure),
+        (searchResult) {
+          if (searchResult.songs.isEmpty) {
+            return Left(YoutubeFailure('No se encontraron recomendaciones.'));
+          }
+          return Right(searchResult.songs);
+        },
+      );
     } catch (e) {
+      _log.e('Recommendations failed: $e');
       return Left(YoutubeFailure('Could not load recommendations'));
     }
   }
 
   /// Helper to fetch multiple pages from a SearchList until reaching target count
-  Future<List<Video>> _fetchExtended(dynamic initial, int target) async {
+  Future<List<dynamic>> _fetchExtended(dynamic initial, int target) async {
     if (initial == null) return [];
-    
-    final List<Video> all = List<Video>.from(initial as Iterable);
+
+    final List<dynamic> all = List<dynamic>.from(initial as Iterable);
     dynamic current = initial;
-    
+
     // We limit safety to 6 pages max to avoid excessive API calls
     for (int page = 1; page < 6 && all.length < target; page++) {
       try {
-        final next = await current.nextPage().timeout(const Duration(seconds: 5));
+        final next =
+            await current.nextPage().timeout(const Duration(seconds: 5));
         if (next == null || next.isEmpty) break;
-        
-        all.addAll(List<Video>.from(next as Iterable));
+
+        all.addAll(List<dynamic>.from(next as Iterable));
         current = next;
       } catch (_) {
-        break; // Stop if page fetch fails or times out
+        break;
       }
     }
     return all;
@@ -333,5 +715,21 @@ class MusicRepositoryImpl implements MusicRepository {
     } catch (e) {
       return Left(YoutubeFailure('Could not fetch video details'));
     }
+  }
+
+  List<SongEntity> _mapToSongList(List<dynamic> videos) {
+    return videos
+        .map((v) {
+          if (v is SearchVideo) return v.toSongEntity();
+          if (v is Video) return v.toSongEntity();
+          // Safe dynamic fallback
+          try {
+            return (v as dynamic).toSongEntity() as SongEntity;
+          } catch (_) {}
+          return null;
+        })
+        .whereType<SongEntity>()
+        .where((s) => _isValidVideoId(s.id))
+        .toList();
   }
 }

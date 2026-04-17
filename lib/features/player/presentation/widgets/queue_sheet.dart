@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../providers/player_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/flowy_marquee.dart';
 import '../../../../domain/entities/entities.dart';
 
 class QueueSheet extends StatelessWidget {
@@ -19,7 +20,18 @@ class QueueSheet extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return Container(
-      decoration: FlowyTheme.glassDecoration(),
+      decoration: BoxDecoration(
+        color: Color(0xFF0D0D14), // Solid dark background (FlowyColors.surface)
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black54,
+            blurRadius: 40,
+            spreadRadius: 2,
+            offset: Offset(0, -10),
+          ),
+        ],
+      ),
       child: SafeArea(
         child: Column(
           children: [
@@ -141,15 +153,13 @@ class _QueueTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      song.title,
+                    FlowyMarquee(
+                      text: song.title,
                       style: TextStyle(
                         color: isCurrent ? scheme.primary : Colors.white,
                         fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
                         fontSize: 14,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       song.artist,

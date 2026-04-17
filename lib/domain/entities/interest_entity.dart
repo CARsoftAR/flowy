@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-enum AudioCategory { music, audiobooks, podcasts, movies }
+enum AudioCategory { music, audiobooks, podcasts }
 
 class InterestEntity {
   final String id;
@@ -10,6 +10,8 @@ class InterestEntity {
   final List<Color> gradientColors;
   final AudioCategory category;
   final String searchQuerySuffix;
+  final List<String> subThemes;
+  final String description;
 
   const InterestEntity({
     required this.id,
@@ -18,6 +20,8 @@ class InterestEntity {
     required this.gradientColors,
     required this.category,
     required this.searchQuerySuffix,
+    this.subThemes = const [],
+    this.description = '',
   });
 }
 
@@ -97,6 +101,8 @@ class CategoryData {
       gradientColors: [Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364)],
       category: AudioCategory.audiobooks,
       searchQuerySuffix: 'audiolibro misterio completo español',
+      subThemes: ['Sherlock Holmes', 'Agatha Christie', 'Policial', 'Suspenso', 'Detectives', 'Crimen', 'Asesinato', 'Thriller', 'Enigmas', 'Desapariciones', 'Casos Reales', 'Relatos'],
+      description: 'Sumérgete en enigmas sin resolver, investigaciones policiales y los mejores clásicos del suspense.',
     ),
     InterestEntity(
       id: 'terror_fiction',
@@ -105,6 +111,8 @@ class CategoryData {
       gradientColors: [Color(0xFF000000), Color(0xFF434343)],
       category: AudioCategory.audiobooks,
       searchQuerySuffix: 'audiolibro relatos de terror español completo',
+      subThemes: ['Fantasmas', 'Zombies', 'Vampiros', 'Lovecraft', 'Psicológico', 'Sobrenatural', 'Stephen King', 'Posesión', 'Terror Clásico', 'Slenderman'],
+      description: 'Historias que te dejarán sin aliento: desde fantasmas y posesiones hasta el terror más psicológico.',
     ),
     InterestEntity(
       id: 'fiction',
@@ -113,6 +121,8 @@ class CategoryData {
       gradientColors: [Color(0xFF11998e), Color(0xFF38ef7d)],
       category: AudioCategory.audiobooks,
       searchQuerySuffix: 'audiolibro completo ficción español',
+      subThemes: ['Extraterrestres', 'Fantasía', 'Ciencia Ficción', 'Épico', 'Aventura', 'Viajes en el tiempo', 'Distopía', 'Mundos Paralelos', 'Cyberpunk', 'Mitología'],
+      description: 'Explora mundos imaginarios, futuros distópicos y aventuras épicas que desafían la realidad.',
     ),
     InterestEntity(
       id: 'philosophy',
@@ -121,6 +131,8 @@ class CategoryData {
       gradientColors: [Color(0xFF485563), Color(0xFF29323c)],
       category: AudioCategory.audiobooks,
       searchQuerySuffix: 'audiolibro filosofía español completo',
+      subThemes: ['Platón', 'Nietzsche', 'Estoicismo', 'Existencialismo', 'Ética'],
+      description: 'Grandes pensadores y corrientes filosóficas para reflexionar sobre la existencia y la ética.',
     ),
     InterestEntity(
       id: 'personal_dev',
@@ -145,6 +157,8 @@ class CategoryData {
       gradientColors: [Color(0xFF4b6cb7), Color(0xFF182848)],
       category: AudioCategory.audiobooks,
       searchQuerySuffix: 'audiolibro historia completa español',
+      subThemes: ['Antigüedad', 'Edad Media', 'Guerras Mundiales', 'Biografías', 'Imperios', 'Egipto', 'Roma', 'Grecia', 'Napoleón', 'Segunda Guerra'],
+      description: 'Un viaje a través del tiempo: desde las antiguas civilizaciones hasta los grandes conflictos modernos.',
     ),
     InterestEntity(
       id: 'finance_books',
@@ -181,6 +195,8 @@ class CategoryData {
       gradientColors: [Color(0xFF141E30), Color(0xFF243B55)],
       category: AudioCategory.podcasts,
       searchQuerySuffix: 'podcast paranormal español',
+      subThemes: ['Fantasmas', 'UFO', 'Ovnis', 'Misterios', 'Leyendas Urbanas', 'Aliens', 'Posesiones', 'Exorcismos', 'Cuarto Milenio', 'Terror Real'],
+      description: 'Explora lo inexplicable: testimonios reales, leyendas urbanas y lo mejor del mundo paranormal.',
     ),
     InterestEntity(
       id: 'ghosts',
@@ -223,6 +239,8 @@ class CategoryData {
       gradientColors: [Color(0xFF2193b0), Color(0xFF6dd5ed)],
       category: AudioCategory.podcasts,
       searchQuerySuffix: 'podcast ciencia',
+      subThemes: ['Astronomía', 'Física', 'Biología', 'Evolución', 'Espacio', 'Cosmología', 'Cuerpo Humano', 'Naturaleza'],
+      description: 'Descubre los secretos del universo y los últimos avances científicos explicados de forma sencilla.',
     ),
     InterestEntity(
       id: 'entrepreneur',
@@ -247,6 +265,8 @@ class CategoryData {
       gradientColors: [Color(0xFF232526), Color(0xFF414345)],
       category: AudioCategory.podcasts,
       searchQuerySuffix: 'podcast tecnología',
+      subThemes: ['Inteligencia Artificial', 'Ciberseguridad', 'Gadgets', 'Programación', 'Smartphones', 'Software', 'Futuro'],
+      description: 'Mantente al día con lo último en IA, gadgets y la evolución del mundo digital.',
     ),
     InterestEntity(
       id: 'true_crime',
@@ -255,6 +275,8 @@ class CategoryData {
       gradientColors: [Color(0xFF870000), Color(0xFF190A05)],
       category: AudioCategory.podcasts,
       searchQuerySuffix: 'podcast crimen real',
+      subThemes: ['Asesinos en serie', 'Casos Famosos', 'Investigación Policial', 'FBI', 'Narcos', 'Estafas', 'Misterios sin resolver'],
+      description: 'Análisis profundo de los crímenes más impactantes y las mentes criminales más complejas.',
     ),
     InterestEntity(
       id: 'mental_health',
@@ -263,14 +285,6 @@ class CategoryData {
       gradientColors: [Color(0xFF00B4DB), Color(0xFF0083B0)],
       category: AudioCategory.podcasts,
       searchQuerySuffix: 'podcast salud mental',
-    ),
-    InterestEntity(
-      id: 'movies',
-      title: 'Cine y TV',
-      icon: FontAwesomeIcons.film,
-      gradientColors: [Color(0xFFe52d27), Color(0xFFb31217)],
-      category: AudioCategory.podcasts,
-      searchQuerySuffix: 'podcast cine y series',
     ),
     InterestEntity(
       id: 'languages',
@@ -298,73 +312,6 @@ class CategoryData {
     ),
   ];
 
-  static const List<InterestEntity> movieInterests = [
-    InterestEntity(
-      id: 'action',
-      title: 'Acción',
-      icon: FontAwesomeIcons.fire,
-      gradientColors: [Color(0xFFe52d27), Color(0xFFb31217)],
-      category: AudioCategory.movies,
-      searchQuerySuffix: 'pelicula completa acción español',
-    ),
-    InterestEntity(
-      id: 'comedy',
-      title: 'Comedia',
-      icon: FontAwesomeIcons.faceGrinBeam,
-      gradientColors: [Color(0xFFf12711), Color(0xFFf5af19)],
-      category: AudioCategory.movies,
-      searchQuerySuffix: 'pelicula completa comedia español',
-    ),
-    InterestEntity(
-      id: 'horror_movies',
-      title: 'Terror',
-      icon: FontAwesomeIcons.skull,
-      gradientColors: [Color(0xFF000000), Color(0xFF434343)],
-      category: AudioCategory.movies,
-      searchQuerySuffix: 'pelicula completa terror español',
-    ),
-    InterestEntity(
-      id: 'sci_fi',
-      title: 'Ciencia Ficción',
-      icon: FontAwesomeIcons.rocket,
-      gradientColors: [Color(0xFF00c6ff), Color(0xFF0072ff)],
-      category: AudioCategory.movies,
-      searchQuerySuffix: 'pelicula completa ciencia ficción español',
-    ),
-    InterestEntity(
-      id: 'documentaries',
-      title: 'Documentales',
-      icon: FontAwesomeIcons.earthAmericas,
-      gradientColors: [Color(0xFF11998e), Color(0xFF38ef7d)],
-      category: AudioCategory.movies,
-      searchQuerySuffix: 'documental completo español',
-    ),
-    InterestEntity(
-      id: 'animation',
-      title: 'Animación',
-      icon: FontAwesomeIcons.palette,
-      gradientColors: [Color(0xFF8e2de2), Color(0xFF4a00e0)],
-      category: AudioCategory.movies,
-      searchQuerySuffix: 'pelicula animación completa español',
-    ),
-    InterestEntity(
-      id: 'drama',
-      title: 'Drama',
-      icon: FontAwesomeIcons.masksTheater,
-      gradientColors: [Color(0xFF3a1c71), Color(0xFFd76d77), Color(0xFFffaf7b)],
-      category: AudioCategory.movies,
-      searchQuerySuffix: 'pelicula completa drama español',
-    ),
-    InterestEntity(
-      id: 'suspense',
-      title: 'Suspenso',
-      icon: FontAwesomeIcons.userSecret,
-      gradientColors: [Color(0xFF2c3e50), Color(0xFF4ca1af)],
-      category: AudioCategory.movies,
-      searchQuerySuffix: 'pelicula completa suspenso español',
-    ),
-  ];
-
   static List<InterestEntity> getInterestsForCategory(AudioCategory category) {
     switch (category) {
       case AudioCategory.music:
@@ -373,8 +320,6 @@ class CategoryData {
         return audiobookInterests;
       case AudioCategory.podcasts:
         return podcastInterests;
-      case AudioCategory.movies:
-        return movieInterests;
     }
   }
 }

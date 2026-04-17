@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import '../../../../services/flowy_engine.dart';
 
 typedef DownloadProgressCallback = void Function(int received, int total);
 
@@ -84,25 +87,67 @@ class DownloadService {
 
   Future<void> _downloadAndWrite(_DownloadTask task) async {
     try {
-      StreamManifest? manifest;
-      try {
-        manifest = await _yt.videos.streamsClient.getManifest(
-          task.id,
-          ytClients: [YoutubeApiClient.ios, YoutubeApiClient.androidVr],
-        );
-      } catch (e) {
-        debugPrint('[DownloadService] iOS/VR fallback failed: $e, trying Android');
-        manifest = await _yt.videos.streamsClient.getManifest(
-          task.id,
-          ytClients: [YoutubeApiClient.android],
-        );
-      }
-      
-      final streamInfo = manifest.audioOnly.withHighestBitrate();
-      if (streamInfo == null) throw Exception('No stream found');
+      String? streamUrl;
+      int? totalSize;
 
-      final url = streamInfo.url.toString();
-      final totalSize = streamInfo.size.totalBytes;
+      // ── PRIMARY ENGINE: Dynamic Invidious API ────────────────────────────────
+      try {
+        final baseUrl = FlowyEngine.currentApiUrl;
+        final response = await http.get(Uri.parse('$baseUrl/api/v1/videos/${task.id}'))
+            .timeout(const Duration(seconds: 15));
+        
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final adaptiveFormats = data['adaptiveFormats'] as List<dynamic>?;
+          
+          if (adaptiveFormats != null && adaptiveFormats.isNotEmpty) {
+            final audioStreams = adaptiveFormats.where((f) => 
+                f['type']?.toString().contains('audio') ?? false).toList();
+            
+            if (audioStreams.isNotEmpty) {
+              audioStreams.sort((a, b) => 
+                 ((b['bitrate'] as num?)?.toInt() ?? 0).compareTo((a['bitrate'] as num?)?.toInt() ?? 0));
+              
+              streamUrl = audioStreams.first['url'] as String?;
+              final sizeStr = audioStreams.first['contentLength']?.toString() ?? audioStreams.first['size']?.toString();
+              totalSize = int.tryParse(sizeStr ?? '');
+              
+              if (streamUrl != null) {
+                debugPrint('[DownloadService] Dynamic Engine OK for ${task.id}');
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[DownloadService] Dynamic Engine failed: $e');
+      }
+
+      // ── FALLBACK ENGINE: YoutubeExplode ─────────────────────────────
+      if (streamUrl == null) {
+        debugPrint('[DownloadService] Using Native Fallback for ${task.id}');
+        StreamManifest? manifest;
+        try {
+          manifest = await _yt.videos.streamsClient.getManifest(
+            task.id,
+            ytClients: [YoutubeApiClient.ios, YoutubeApiClient.androidVr],
+          );
+        } catch (e) {
+          manifest = await _yt.videos.streamsClient.getManifest(
+            task.id,
+            ytClients: [YoutubeApiClient.android],
+          );
+        }
+        
+        final streamInfo = manifest.audioOnly.withHighestBitrate();
+        streamUrl = streamInfo.url.toString();
+        totalSize = streamInfo.size.totalBytes;
+      }
+
+      if (streamUrl == null) throw Exception('No stream found');
+      // Ensure totalSize is at least estimated if not provided by API
+      totalSize ??= 5 * 1024 * 1024; 
+
+      final url = streamUrl;
 
       final file = File(task.savePath);
       if (await file.exists()) await file.delete();

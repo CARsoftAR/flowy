@@ -8,6 +8,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/premium_transitions.dart';
 import '../../../../domain/entities/entities.dart';
+import '../../../../core/widgets/flowy_marquee.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../player/presentation/pages/player_page.dart';
 
@@ -229,14 +230,12 @@ class _MiniPlayerContent extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        song.title,
+                      FlowyMarquee(
+                        text: song.title,
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: Colors.white,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -262,15 +261,27 @@ class _MiniPlayerContent extends StatelessWidget {
                         player.skipToPrevious();
                       },
                     ),
-                    const SizedBox(width: 4),
-                    _PlayPauseButton(player: player),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 8),
+                    _PlayPauseButton(song: song, player: player),
+                    const SizedBox(width: 8),
                     _ControlButton(
                       icon: Icons.skip_next_rounded,
                       onTap: () {
                         HapticEngine.light();
                         player.skipToNext();
                       },
+                    ),
+                    const SizedBox(width: 8),
+                    Builder(
+                      builder: (ctx) => _ControlButton(
+                        icon: Icons.queue_music_rounded,
+                        onTap: () {
+                          HapticEngine.light();
+                          Navigator.of(ctx).push(
+                            PremiumTransitions.slideUp(const PlayerPage()),
+                          );
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -300,8 +311,9 @@ class _MiniPlayerContent extends StatelessWidget {
 }
 
 class _PlayPauseButton extends StatelessWidget {
+  final SongEntity song;
   final PlayerProvider player;
-  const _PlayPauseButton({required this.player});
+  const _PlayPauseButton({required this.song, required this.player});
 
   @override
   Widget build(BuildContext context) {
@@ -311,30 +323,68 @@ class _PlayPauseButton extends StatelessWidget {
         player.togglePlayPause();
       },
       child: Container(
-        width: 38,
-        height: 38,
+        width: 56,
+        height: 56,
         decoration: BoxDecoration(
-          color: player.dominantColor,
           shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-        child: player.isLoading
-            ? const Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            ClipOval(
+              child: CachedNetworkImage(
+                imageUrl: song.bestThumbnail,
+                width: 56,
+                height: 56,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(
+                  width: 56,
+                  height: 56,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 ),
-              )
-            : Icon(
-                player.isPlaying
-                    ? Icons.pause_rounded
-                    : Icons.play_arrow_rounded,
-                color: ThemeData.estimateBrightnessForColor(player.dominantColor) == Brightness.light
-                    ? Colors.black87
-                    : Colors.white,
-                size: 22,
               ),
+            ),
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black.withOpacity(0.35),
+              ),
+            ),
+            player.isLoading
+                ? const Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                  )
+                : Icon(
+                    player.isPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 32,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black.withOpacity(0.5),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+          ],
+        ),
       ),
     );
   }

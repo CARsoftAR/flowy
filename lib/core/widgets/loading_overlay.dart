@@ -38,23 +38,6 @@ class AudioLoadingOverlay extends StatelessWidget {
                       valueColor: AlwaysStoppedAnimation(Color(0xFF7C4DFF)),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Conectando al servidor...',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Negociando audio de alta calidad',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: 12,
-                    ),
-                  ),
                 ],
               ),
             ).animate().scale(begin: const Offset(0.8, 0.8)).fadeIn(),
