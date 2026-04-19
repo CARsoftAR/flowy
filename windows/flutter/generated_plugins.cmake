@@ -5,6 +5,8 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
   dynamic_color
+  media_kit_libs_windows_video
+  media_kit_video
   permission_handler_windows
   rive_native
   sqlite3_flutter_libs

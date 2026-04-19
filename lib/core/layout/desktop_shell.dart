@@ -13,6 +13,7 @@ import '../../features/player/presentation/widgets/mini_player.dart';
 import '../../features/player/presentation/pages/player_page.dart';
 import '../../features/player/presentation/widgets/queue_sheet.dart';
 import '../../core/theme/premium_transitions.dart';
+import '../../services/flowy_engine.dart';
 
 class DesktopShell extends StatefulWidget {
   final List<Widget> pages;
@@ -39,12 +40,12 @@ class _DesktopShellState extends State<DesktopShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final player = context.read<PlayerProvider>();
       _lastSongId = player.currentSong?.id;
-      
+
       player.addListener(() {
         if (player.hasError && player.errorMessage != null) {
           _showError(context, player.errorMessage!, player);
         }
-        
+
         final currentSongId = player.currentSong?.id;
         if (currentSongId != null && currentSongId != _lastSongId) {
           _lastSongId = currentSongId;
@@ -72,7 +73,9 @@ class _DesktopShellState extends State<DesktopShell> {
                 ScaffoldMessenger.of(context).hideCurrentSnackBar();
                 player.clearError();
               },
-              child: const Text('CERRAR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text('CERRAR',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -85,10 +88,19 @@ class _DesktopShellState extends State<DesktopShell> {
     );
   }
 
+  void _showProviderSelector(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => const _ProviderSelectorSheet(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final player = context.watch<PlayerProvider>();
-    
+
     return Scaffold(
       backgroundColor: FlowyColors.surface,
       body: AmbientBackground(
@@ -101,10 +113,11 @@ class _DesktopShellState extends State<DesktopShell> {
                 color: FlowyColors.surface.withOpacity(0.4),
               ),
             ),
-            
+
             // ── Main Layout ──────────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.all(20.0), // increased padding for breathe room
+              padding: const EdgeInsets.all(
+                  20.0), // increased padding for breathe room
               child: Row(
                 children: [
                   // ── Sidebar (Narrow, Fluent style) ────────────────────────
@@ -113,7 +126,7 @@ class _DesktopShellState extends State<DesktopShell> {
                     onIndexChanged: widget.onIndexChanged,
                   ),
                   const SizedBox(width: 20),
-                  
+
                   // ── Main Content Area ─────────────────────────────────────
                   Expanded(
                     child: Column(
@@ -146,7 +159,7 @@ class _DesktopShellState extends State<DesktopShell> {
             // ── Floating Player Dock ─────────────────────────────────────────
             Positioned(
               bottom: 24,
-              left: 104, 
+              left: 104,
               right: 24,
               child: _FloatingPlayerDock(player: player),
             ),
@@ -232,7 +245,7 @@ class _SidebarIconState extends State<_SidebarIcon> {
   @override
   Widget build(BuildContext context) {
     final activeColor = widget.color ?? FlowyColors.brandAccent;
-    
+
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -247,21 +260,27 @@ class _SidebarIconState extends State<_SidebarIcon> {
             duration: const Duration(milliseconds: 300),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: widget.isSelected 
-                ? activeColor.withOpacity(0.18) 
-                : (_isHovered ? Colors.white.withOpacity(0.08) : Colors.transparent),
+              color: widget.isSelected
+                  ? activeColor.withOpacity(0.18)
+                  : (_isHovered
+                      ? Colors.white.withOpacity(0.08)
+                      : Colors.transparent),
               borderRadius: BorderRadius.circular(16),
-              boxShadow: widget.isSelected ? [
-                BoxShadow(
-                  color: activeColor.withOpacity(0.25),
-                  blurRadius: 20,
-                  spreadRadius: -2,
-                )
-              ] : null,
+              boxShadow: widget.isSelected
+                  ? [
+                      BoxShadow(
+                        color: activeColor.withOpacity(0.25),
+                        blurRadius: 20,
+                        spreadRadius: -2,
+                      )
+                    ]
+                  : null,
             ),
             child: Icon(
               widget.icon,
-              color: (widget.isSelected || _isHovered) ? activeColor : Colors.white54,
+              color: (widget.isSelected || _isHovered)
+                  ? activeColor
+                  : Colors.white54,
               size: 28,
             ),
           ),
@@ -301,18 +320,17 @@ class _PremiumTopBar extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white24, width: 2),
-            image: const DecorationImage(
-              image: NetworkImage('https://i.pravatar.cc/150?u=flowy'),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 10,
-              )
-            ]
-          ),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white24, width: 2),
+              image: const DecorationImage(
+                image: NetworkImage('https://i.pravatar.cc/150?u=flowy'),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 10,
+                )
+              ]),
         ),
       ],
     );
@@ -347,17 +365,19 @@ class _GlassButtonState extends State<_GlassButton> {
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: _isHovered ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.05),
+              color: _isHovered
+                  ? Colors.white.withOpacity(0.12)
+                  : Colors.white.withOpacity(0.05),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: _isHovered ? Colors.white.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+                color: _isHovered
+                    ? Colors.white.withOpacity(0.2)
+                    : Colors.white.withOpacity(0.05),
               ),
             ),
-            child: Icon(
-              widget.icon, 
-              color: _isHovered ? FlowyColors.brandAccent : Colors.white70, 
-              size: 22
-            ),
+            child: Icon(widget.icon,
+                color: _isHovered ? FlowyColors.brandAccent : Colors.white70,
+                size: 22),
           ),
         ),
       ),
@@ -377,7 +397,8 @@ class _FloatingPlayerDock extends StatelessWidget {
         borderRadius: 24,
         opacity: 0.12,
         borderWidth: 1.0,
-        tintColor: player.currentSong != null ? player.dominantColor : Colors.white,
+        tintColor:
+            player.currentSong != null ? player.dominantColor : Colors.white,
       ),
       clipBehavior: Clip.antiAlias,
       child: BackdropFilter(
@@ -391,9 +412,6 @@ class _FloatingPlayerDock extends StatelessWidget {
   }
 }
 
-
-
-
 class _DesktopPlayerBar extends StatelessWidget {
   final PlayerProvider player;
 
@@ -402,9 +420,9 @@ class _DesktopPlayerBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final song = player.currentSong;
-    
+
     final accentColor = player.dominantColor;
-    
+
     return SizedBox(
       height: 116,
       child: Row(
@@ -412,93 +430,95 @@ class _DesktopPlayerBar extends StatelessWidget {
           // ── Left: Song Info ───────────────────────────────────────────────
           Expanded(
             flex: 3,
-            child: song == null 
-              ? const SizedBox.shrink()
-              : Row(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: accentColor.withOpacity(0.4),
-                            blurRadius: 20,
-                            spreadRadius: -4,
+            child: song == null
+                ? const SizedBox.shrink()
+                : Row(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: accentColor.withOpacity(0.4),
+                              blurRadius: 20,
+                              spreadRadius: -4,
+                            ),
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.5),
+                              blurRadius: 15,
+                              spreadRadius: -2,
+                            ),
+                          ],
+                        ),
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              PremiumTransitions.slideUp(const PlayerPage()),
+                            );
+                          },
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: CachedNetworkImage(
+                              imageUrl: song.bestThumbnail,
+                              width: 72,
+                              height: 72,
+                              fit: BoxFit.cover,
+                            ),
                           ),
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.5),
-                            blurRadius: 15,
-                            spreadRadius: -2,
-                          ),
-                        ],
+                        ),
                       ),
-                      child: GestureDetector(
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              song.title,
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              song.artist,
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      _SmallGlassButton(
+                        icon: context.watch<LibraryProvider>().isLiked(song.id)
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        iconColor:
+                            context.watch<LibraryProvider>().isLiked(song.id)
+                                ? Colors.pinkAccent
+                                : Colors.white70,
+                        onTap: () =>
+                            context.read<LibraryProvider>().toggleLike(song),
+                      ),
+                      const SizedBox(width: 8),
+                      _SmallGlassButton(
+                        icon: Icons.fullscreen_rounded,
+                        iconColor: Colors.white70,
                         onTap: () {
                           Navigator.of(context).push(
                             PremiumTransitions.slideUp(const PlayerPage()),
                           );
                         },
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: CachedNetworkImage(
-                            imageUrl: song.bestThumbnail,
-                            width: 72,
-                            height: 72,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            song.title,
-                            style: GoogleFonts.outfit(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            song.artist,
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    _SmallGlassButton(
-                      icon: context.watch<LibraryProvider>().isLiked(song.id) 
-                        ? Icons.favorite_rounded 
-                        : Icons.favorite_border_rounded,
-                      iconColor: context.watch<LibraryProvider>().isLiked(song.id) 
-                        ? Colors.pinkAccent 
-                        : Colors.white70,
-                      onTap: () => context.read<LibraryProvider>().toggleLike(song),
-                    ),
-                    const SizedBox(width: 8),
-                    _SmallGlassButton(
-                      icon: Icons.fullscreen_rounded,
-                      iconColor: Colors.white70,
-                      onTap: () {
-                        Navigator.of(context).push(
-                          PremiumTransitions.slideUp(const PlayerPage()),
-                        );
-                      },
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
           ),
           const SizedBox(width: 40),
           // ── Center: Controls ──────────────────────────────────────────────
@@ -511,8 +531,24 @@ class _DesktopPlayerBar extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     IconButton(
-                      icon: Icon(Icons.shuffle_rounded, size: 20,
-                        color: player.isShuffle ? accentColor : Colors.white60),
+                      icon: Icon(Icons.wifi_tethering_rounded,
+                          size: 20,
+                          color: FlowyEngine.status.value ==
+                                  ConnectionStatus.connected
+                              ? Colors.green
+                              : Colors.orange),
+                      onPressed: () => showModalBottomSheet(
+                        context: context,
+                        backgroundColor: Colors.transparent,
+                        isScrollControlled: true,
+                        builder: (ctx) => const _ProviderSelectorSheet(),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.shuffle_rounded,
+                          size: 20,
+                          color:
+                              player.isShuffle ? accentColor : Colors.white60),
                       onPressed: player.toggleShuffle,
                     ),
                     IconButton(
@@ -567,15 +603,18 @@ class _DesktopPlayerBar extends StatelessWidget {
                   },
                 ),
                 const SizedBox(width: 12),
-                const Icon(Icons.volume_up_rounded, size: 20, color: Colors.white54),
+                const Icon(Icons.volume_up_rounded,
+                    size: 20, color: Colors.white54),
                 const SizedBox(width: 8),
                 SizedBox(
                   width: 110,
                   child: SliderTheme(
                     data: SliderThemeData(
                       trackHeight: 4,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 0),
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      overlayShape:
+                          const RoundSliderOverlayShape(overlayRadius: 0),
                       activeTrackColor: accentColor,
                       inactiveTrackColor: Colors.white.withOpacity(0.1),
                     ),
@@ -599,7 +638,8 @@ class _SmallGlassButton extends StatelessWidget {
   final VoidCallback onTap;
   final Color? iconColor;
 
-  const _SmallGlassButton({required this.icon, required this.onTap, this.iconColor});
+  const _SmallGlassButton(
+      {required this.icon, required this.onTap, this.iconColor});
 
   @override
   Widget build(BuildContext context) {
@@ -618,7 +658,6 @@ class _SmallGlassButton extends StatelessWidget {
     );
   }
 }
-
 
 class _ProgressBar extends StatelessWidget {
   final PlayerProvider player;
@@ -649,7 +688,9 @@ class _ProgressBar extends StatelessWidget {
             ),
             child: Slider(
               value: player.position.inSeconds.toDouble(),
-              max: player.duration.inSeconds.toDouble().clamp(1.0, double.infinity),
+              max: player.duration.inSeconds
+                  .toDouble()
+                  .clamp(1.0, double.infinity),
               onChanged: (val) => player.seekTo(Duration(seconds: val.toInt())),
             ),
           ),
@@ -720,13 +761,128 @@ class _DesktopPlayButton extends StatelessWidget {
             color: Colors.white,
             shape: BoxShape.circle,
           ),
-        child: Icon(
-          player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-          color: Colors.black,
-          size: 24,
+          child: Icon(
+            player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            color: Colors.black,
+            size: 24,
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
+
+class _ProviderSelectorSheet extends StatelessWidget {
+  const _ProviderSelectorSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1F),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 16),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Seleccionar Proveedor',
+            style: GoogleFonts.outfit(
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            FlowyEngine.currentProviderName,
+            style: TextStyle(
+              fontSize: 14,
+              color: FlowyEngine.status.value == ConnectionStatus.connected
+                  ? Colors.green
+                  : Colors.orange,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: FlowyEngine.providers.length,
+              itemBuilder: (context, index) {
+                final provider = FlowyEngine.providers[index];
+                final isSelected = provider.url == FlowyEngine.currentApiUrl;
+
+                return ListTile(
+                  leading: Icon(
+                    provider.type == ProviderType.invidious
+                        ? Icons.video_library_rounded
+                        : provider.type == ProviderType.piped
+                            ? Icons.stream_rounded
+                            : Icons.play_circle_rounded,
+                    color: provider.isWorking ? Colors.green : Colors.red,
+                  ),
+                  title: Text(
+                    provider.name,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.white70,
+                      fontWeight:
+                          isSelected ? FontWeight.w900 : FontWeight.normal,
+                    ),
+                  ),
+                  subtitle: provider.isWorking && provider.latencyMs > 0
+                      ? Text('${provider.latencyMs}ms')
+                      : null,
+                  trailing: isSelected
+                      ? Icon(Icons.check_circle_rounded, color: Colors.green)
+                      : provider.isWorking
+                          ? null
+                          : Icon(Icons.cancel_rounded,
+                              color: Colors.redAccent.withOpacity(0.5)),
+                  onTap: provider.isWorking
+                      ? () async {
+                          await FlowyEngine.switchProvider(provider);
+                          if (context.mounted) Navigator.pop(context);
+                        }
+                      : null,
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                await FlowyEngine.refresh();
+                if (context.mounted) Navigator.pop(context);
+              },
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Escanear Proveedores'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white10,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+        ],
+      ),
+    );
+  }
 }

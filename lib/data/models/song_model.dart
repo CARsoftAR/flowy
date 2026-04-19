@@ -16,6 +16,7 @@ extension VideoToSongEntity on Video {
       highResThumbnailUrl: thumbnails.maxResUrl,
       duration: duration ?? Duration.zero,
       isLive: isLive,
+      isVideo: true,
     );
   }
 }
@@ -37,6 +38,7 @@ extension SearchVideoToSongEntity on SearchVideo {
       thumbnailUrl: thumbLow,
       highResThumbnailUrl: thumbHigh,
       duration: parsedDuration,
+      isVideo: true,
     );
   }
 

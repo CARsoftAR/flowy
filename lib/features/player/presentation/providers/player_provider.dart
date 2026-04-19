@@ -27,6 +27,7 @@ class PlayerProvider extends ChangeNotifier {
   String? _errorMessage;
   // Flag para bloquear el stream mientras se ejecuta stop()
   bool _isStopping = false;
+  bool _videoMode = false;
   Color _dominantColor = const Color(0xFF1DB954); // Default Spotify Green
 
   PlayerProvider({
@@ -59,11 +60,13 @@ class PlayerProvider extends ChangeNotifier {
   Color get dominantColor => _dominantColor;
   String? get errorMessage => _errorMessage;
   FlowyAudioHandler get handler => _handler;
+  bool get videoMode => _videoMode;
   bool get hasError => _status == PlayerStatus.error && _errorMessage != null;
 
   double get progress {
     if (_duration.inMilliseconds == 0) return 0.0;
-    return (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0);
+    return (_position.inMilliseconds / _duration.inMilliseconds)
+        .clamp(0.0, 1.0);
   }
 
   List<SongEntity> get queue => _handler.currentQueue;
@@ -88,8 +91,9 @@ class PlayerProvider extends ChangeNotifier {
       if (_isStopping) return;
 
       final nextSong = _handler.currentSong;
-      
-      if (nextSong?.id != _currentSong?.id || state.processingState == AudioProcessingState.completed) {
+
+      if (nextSong?.id != _currentSong?.id ||
+          state.processingState == AudioProcessingState.completed) {
         _currentSong = nextSong;
         _position = Duration.zero;
         _updateDominantColor();
@@ -119,13 +123,15 @@ class PlayerProvider extends ChangeNotifier {
       _playbackSpeed = state.speed;
       notifyListeners();
     });
-    
+
     // Listen for custom events from AudioHandler
     _handler.customEvent.listen((event) {
       if (event is Map<String, dynamic>) {
         if (event['type'] == 'favorite_toggled') {
           notifyListeners();
         } else if (event['type'] == 'url_resolved') {
+          notifyListeners();
+        } else if (event['type'] == 'video_url_resolved') {
           notifyListeners();
         }
       }
@@ -135,14 +141,16 @@ class PlayerProvider extends ChangeNotifier {
   Future<void> _updateDominantColor() async {
     final song = _currentSong;
     if (song == null) return;
-    
+
     // Reset chapters
     _chapters = [];
     notifyListeners();
 
     // Parallel fetch: Palette & Metadata
     Future.wait([
-      DynamicPaletteService().getDominantColor(song.bestThumbnail).then((color) {
+      DynamicPaletteService()
+          .getDominantColor(song.bestThumbnail)
+          .then((color) {
         if (color != null) _dominantColor = color;
       }),
       _fetchChapters(song.id),
@@ -165,19 +173,22 @@ class PlayerProvider extends ChangeNotifier {
   List<ChapterEntity> _parseChapters(String description) {
     final chapters = <ChapterEntity>[];
     // Regex for: 00:00, 0:00, 1:23:45, [00:00], (00:00)
-    final regex = RegExp(r'(?:\b|\[|\()(\d{1,2}:)?(\d{1,2}):(\d{2})(?:\b|\]|\))\s*(.*)');
-    
+    final regex =
+        RegExp(r'(?:\b|\[|\()(\d{1,2}:)?(\d{1,2}):(\d{2})(?:\b|\]|\))\s*(.*)');
+
     for (final line in description.split('\n')) {
       final match = regex.firstMatch(line);
       if (match != null) {
-        final hours = match.group(1) != null ? int.parse(match.group(1)!.replaceAll(':', '')) : 0;
+        final hours = match.group(1) != null
+            ? int.parse(match.group(1)!.replaceAll(':', ''))
+            : 0;
         final minutes = int.parse(match.group(2)!);
         final seconds = int.parse(match.group(3)!);
         var title = match.group(4)?.trim() ?? 'Capítulo';
-        
+
         // Remove leading dashes, dots or numbers followed by dots
         title = title.replaceFirst(RegExp(r'^[\s\-\.\:\)]+'), '').trim();
-        
+
         chapters.add(ChapterEntity(
           startTime: Duration(hours: hours, minutes: minutes, seconds: seconds),
           title: title,
@@ -249,6 +260,23 @@ class PlayerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> toggleVideoMode() async {
+    _videoMode = !_videoMode;
+    notifyListeners();
+
+    // Fuerza la recarga de URL de video
+    if (_currentSong != null && _videoMode) {
+      final videoUrl = await _handler.getVideoUrl(_currentSong!.id);
+      debugPrint('📺 toggleVideoMode: got videoUrl=${videoUrl != null}');
+    }
+
+    // Si hay una canción sonando, intentamos reiniciarla con el nuevo modo
+    if (_currentSong != null) {
+      final updatedSong = _currentSong!.copyWith(isVideo: _videoMode);
+      await playSong(updatedSong, queue: _handler.currentQueue);
+    }
+  }
+
   Future<void> setVolume(double vol) async {
     _volume = vol;
     await _handler.setVolume(vol);
@@ -261,14 +289,16 @@ class PlayerProvider extends ChangeNotifier {
       if (currentSong != null && _handler.currentQueue.isNotEmpty) {
         _originalQueue = List.from(_handler.currentQueue);
         _originalIndex = _handler.currentQueueIndex;
-        
-        final shuffledQueue = List<SongEntity>.from(_handler.currentQueue)..shuffle();
-        final currentIndexInShuffled = shuffledQueue.indexWhere((s) => s.id == currentSong.id);
+
+        final shuffledQueue = List<SongEntity>.from(_handler.currentQueue)
+          ..shuffle();
+        final currentIndexInShuffled =
+            shuffledQueue.indexWhere((s) => s.id == currentSong.id);
         if (currentIndexInShuffled != -1) {
           shuffledQueue.removeAt(currentIndexInShuffled);
         }
         shuffledQueue.insert(0, currentSong);
-        
+
         _handler.setQueue(shuffledQueue, 0);
       }
     } else {
@@ -277,7 +307,7 @@ class PlayerProvider extends ChangeNotifier {
         _originalQueue = null;
       }
     }
-    
+
     _isShuffle = !_isShuffle;
     notifyListeners();
   }

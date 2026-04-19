@@ -4,6 +4,7 @@ import 'package:dartz/dartz.dart';
 import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/errors/failures.dart';
 import '../../services/flowy_engine.dart';
 import '../../domain/entities/entities.dart';
@@ -77,6 +78,8 @@ class MusicRepositoryImpl implements MusicRepository {
             artist: item['author'] ?? 'Artista desconocido',
             thumbnailUrl: thumb,
             duration: Duration(seconds: item['lengthSeconds'] ?? 0),
+            isVideo:
+                AppConstants.isPremium, // Integración de video para Premium
           );
         }).where((s) {
           if (!_isValidVideoId(s.id)) return false;
@@ -169,12 +172,44 @@ class MusicRepositoryImpl implements MusicRepository {
 
       if (metaRes.statusCode == 200) {
         final data = json.decode(metaRes.body);
-        int? bestItag;
+        String? streamUrl;
 
+        if (isVideo) {
+          // Buscar en formatStreams (muxed: video+audio juntos)
+          final formatStreams = data['formatStreams'] as List<dynamic>?;
+          if (formatStreams != null && formatStreams.isNotEmpty) {
+            formatStreams.sort((a, b) {
+              final resA = int.tryParse(a['resolution']
+                          ?.toString()
+                          .replaceAll('p', '')
+                          .replaceAll('x', '') ??
+                      '0') ??
+                  0;
+              final resB = int.tryParse(b['resolution']
+                          ?.toString()
+                          .replaceAll('p', '')
+                          .replaceAll('x', '') ??
+                      '0') ??
+                  0;
+              return resB.compareTo(resA);
+            });
+            streamUrl = formatStreams.first['url']?.toString();
+            _log.d(
+                'Invidious: Video muxed ${formatStreams.first['resolution']} → $streamUrl');
+          }
+        }
+
+        if (streamUrl != null && streamUrl.isNotEmpty) {
+          _log.i('Invidious Video OK → $streamUrl');
+          return Right(streamUrl);
+        }
+
+        int? bestItag;
         final adaptiveFormats = data['adaptiveFormats'] as List<dynamic>?;
-        if (adaptiveFormats != null) {
-          // Prioridad: audio/mp4 (AAC — codec nativo Android, siempre suena)
-          final mp4Audio = adaptiveFormats.where((f) {
+
+        if (bestItag == null && adaptiveFormats != null) {
+          // Prioridad Audio: mp4 (AAC — codec nativo Android)
+          final mp4Audio = adaptiveFormats!.where((f) {
             final type = f['type']?.toString() ?? '';
             return type.contains('audio') && type.contains('mp4');
           }).toList();
@@ -188,7 +223,7 @@ class MusicRepositoryImpl implements MusicRepository {
 
           // Fallback: audio/webm (Opus)
           if (bestItag == null) {
-            final webmAudio = adaptiveFormats.where((f) {
+            final webmAudio = adaptiveFormats!.where((f) {
               final type = f['type']?.toString() ?? '';
               return type.contains('audio') && type.contains('webm');
             }).toList();
@@ -371,6 +406,8 @@ class MusicRepositoryImpl implements MusicRepository {
     return [
       _tryTvClientFast,
       _tryAndroidVrFast,
+      if (isVideo) _tryMuxedVideo, // Activar video nativo
+      if (isVideo) _tryAnyVideo,
       _tryIosClient,
       _tryAndroidClient,
       _tryAnyAudio,

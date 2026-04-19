@@ -13,7 +13,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/ambient_background.dart';
 import '../../../../core/widgets/flowy_marquee.dart';
 import '../../../../domain/entities/entities.dart';
-import 'package:flowy/features/player/presentation/providers/player_provider.dart' as pp;
+import 'package:flowy/features/player/presentation/providers/player_provider.dart'
+    as pp;
 import 'package:flowy/features/library/presentation/providers/download_provider.dart';
 import 'package:flowy/features/library/presentation/providers/library_provider.dart';
 import '../widgets/audio_wave_bar.dart';
@@ -69,13 +70,13 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
                 children: [
                   _buildTopBar(context),
                   const SizedBox(height: 8),
-
                   Expanded(
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 700),
                       switchInCurve: Curves.easeOutCubic,
                       switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (Widget child, Animation<double> animation) {
+                      transitionBuilder:
+                          (Widget child, Animation<double> animation) {
                         return FadeTransition(opacity: animation, child: child);
                       },
                       child: _showLyrics
@@ -85,22 +86,21 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
                               position: player.position,
                               onTap: () => setState(() => _showLyrics = false),
                             )
-                          : _buildArtworkSection(song, player.dominantColor),
+                          : (song.isVideo || _hasVideoUrl(player, song)
+                              ? _buildVideoSection(song, player)
+                              : _buildArtworkSection(
+                                  song, player.dominantColor)),
                     ),
                   ),
-
                   _buildSongInfo(context, player, song),
                   const SizedBox(height: 8),
-
                   AudioWaveBar(
                     isPlaying: player.isPlaying,
                     color: player.dominantColor,
                   ),
                   const SizedBox(height: 8),
-
                   _buildControls(context, player),
                   const SizedBox(height: 24),
-
                   _buildProgressBar(context, player),
                   const SizedBox(height: 16),
                 ],
@@ -222,30 +222,18 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
                     duration: const Duration(milliseconds: 800),
                     curve: Curves.easeInOut,
                     child: CachedNetworkImage(
-                      imageUrl: song.bestThumbnail,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
-                        decoration: BoxDecoration(
-                          color: FlowyColors.surfaceContainer,
-                          gradient: LinearGradient(
-                            colors: [
-                              dominantColor.withOpacity(0.3),
-                              FlowyColors.surfaceContainer,
-                            ],
-                          ),
+                          imageUrl: song.bestThumbnail,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(color: Colors.black),
+                          errorWidget: (_, __, ___) => Container(color: Colors.black),
                         ),
-                        child: const Center(
-                          child: Icon(Icons.music_note, color: Colors.white30, size: 64),
-                        ),
-                      ),
-                    ),
                   ),
                 ),
               ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(
-                begin: const Offset(1.0, 1.0),
-                end: const Offset(1.02, 1.02),
-                duration: 1.seconds,
-              ),
+                    begin: const Offset(1.0, 1.0),
+                    end: const Offset(1.02, 1.02),
+                    duration: 1.seconds,
+                  ),
             ),
           ),
         ],
@@ -253,8 +241,13 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
     );
   }
 
+  bool _hasVideoUrl(pp.PlayerProvider player, SongEntity song) {
+    final url = player.handler.getCachedVideoUrl(song.id);
+    return url != null && url.isNotEmpty;
+  }
+
   Widget _buildVideoSection(SongEntity song, pp.PlayerProvider player) {
-    final streamUrl = player.handler.getCachedUrl(song.id);
+    final streamUrl = player.handler.getCachedVideoUrl(song.id);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: AspectRatio(
@@ -262,26 +255,31 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            boxShadow: FlowyTheme.glowShadow(player.dominantColor, intensity: 0.3),
+            boxShadow:
+                FlowyTheme.glowShadow(player.dominantColor, intensity: 0.3),
           ),
           clipBehavior: Clip.antiAlias,
-          child: streamUrl != null
+          child: streamUrl != null && streamUrl.isNotEmpty
               ? VideoPlayerWidget(
                   songId: song.id,
                   streamUrl: streamUrl,
+                  coverUrl: song.bestThumbnail,
                   isPlaying: player.isPlaying,
                   position: player.position,
                 )
-              : Container(
-                  color: Colors.black,
-                  child: const Center(child: CircularProgressIndicator()),
+              : CachedNetworkImage(
+                  imageUrl: song.bestThumbnail,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(color: Colors.black),
+                  errorWidget: (_, __, ___) => Container(color: Colors.black),
                 ),
         ),
       ),
     );
   }
 
-  Widget _buildSongInfo(BuildContext context, pp.PlayerProvider player, SongEntity song) {
+  Widget _buildSongInfo(
+      BuildContext context, pp.PlayerProvider player, SongEntity song) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
@@ -296,14 +294,18 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
                       ),
-                ).animate().fadeIn(duration: AppConstants.animationNormal).slideX(begin: -0.05),
+                )
+                    .animate()
+                    .fadeIn(duration: AppConstants.animationNormal)
+                    .slideX(begin: -0.05),
                 const SizedBox(height: 4),
                 Text(
                   song.artist,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Colors.white60,
                       ),
-                ).animate().fadeIn(delay: 100.ms, duration: AppConstants.animationNormal),
+                ).animate().fadeIn(
+                    delay: 100.ms, duration: AppConstants.animationNormal),
               ],
             ),
           ),
@@ -340,15 +342,21 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
                             ),
                           )
                         : Icon(
-                            isDownloaded ? Icons.download_done_rounded : Icons.download_rounded,
-                            color: isDownloaded ? player.dominantColor : Colors.white60,
+                            isDownloaded
+                                ? Icons.download_done_rounded
+                                : Icons.download_rounded,
+                            color: isDownloaded
+                                ? player.dominantColor
+                                : Colors.white60,
                           ),
                     iconSize: 26,
                   ),
                   IconButton(
                     onPressed: () => library.toggleLike(song),
                     icon: Icon(
-                      isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                      isLiked
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
                       color: isLiked ? player.dominantColor : Colors.white60,
                     ),
                     iconSize: 26,
@@ -364,7 +372,10 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
 
   Widget _buildProgressBar(BuildContext context, pp.PlayerProvider player) {
     final accentColor = player.dominantColor;
-    final brightAccent = HSLColor.fromColor(accentColor).withLightness(0.6).withSaturation(1.0).toColor();
+    final brightAccent = HSLColor.fromColor(accentColor)
+        .withLightness(0.6)
+        .withSaturation(1.0)
+        .toColor();
     const neonCyan = Color(0xFF00F2FF);
     const barHeight = 28.0;
 
@@ -408,7 +419,8 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
               final box = context.findRenderObject() as RenderBox;
               // Account for padding (24 each side)
               final localX = details.localPosition.dx;
-              final barWidth = box.size.width - 48; // subtract horizontal padding
+              final barWidth =
+                  box.size.width - 48; // subtract horizontal padding
               final ratio = ((localX) / box.size.width).clamp(0.0, 1.0);
               final newPos = Duration(
                 milliseconds: (ratio * player.duration.inMilliseconds).round(),
@@ -417,7 +429,8 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
             },
             onHorizontalDragUpdate: (details) {
               final box = context.findRenderObject() as RenderBox;
-              final ratio = (details.localPosition.dx / box.size.width).clamp(0.0, 1.0);
+              final ratio =
+                  (details.localPosition.dx / box.size.width).clamp(0.0, 1.0);
               final newPos = Duration(
                 milliseconds: (ratio * player.duration.inMilliseconds).round(),
               );
@@ -487,7 +500,8 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
               player.skipToPrevious();
             },
           ),
-          _EtherealPlayButton(player: player, dominantColor: player.dominantColor),
+          _EtherealPlayButton(
+              player: player, dominantColor: player.dominantColor),
           _GlassControlButton(
             icon: Icons.skip_next_rounded,
             iconSize: 34,
@@ -497,7 +511,9 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
             },
           ),
           _GlassControlButton(
-            icon: player.repeatMode == pp.FlowyRepeatMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+            icon: player.repeatMode == pp.FlowyRepeatMode.one
+                ? Icons.repeat_one_rounded
+                : Icons.repeat_rounded,
             isActive: player.repeatMode != pp.FlowyRepeatMode.off,
             activeColor: player.dominantColor,
             onTap: () {
@@ -521,13 +537,18 @@ class _EtherealPlayButton extends StatelessWidget {
   final pp.PlayerProvider player;
   final Color dominantColor;
 
-  const _EtherealPlayButton({required this.player, required this.dominantColor});
+  const _EtherealPlayButton(
+      {required this.player, required this.dominantColor});
 
   @override
   Widget build(BuildContext context) {
-    final vibrantColor = HSLColor.fromColor(dominantColor).withLightness(0.6).withSaturation(1.0).toColor();
-    final deepColor = HSLColor.fromColor(dominantColor).withLightness(0.15).toColor();
-    
+    final vibrantColor = HSLColor.fromColor(dominantColor)
+        .withLightness(0.6)
+        .withSaturation(1.0)
+        .toColor();
+    final deepColor =
+        HSLColor.fromColor(dominantColor).withLightness(0.15).toColor();
+
     return GestureDetector(
       onTap: () {
         HapticEngine.medium();
@@ -569,7 +590,8 @@ class _EtherealPlayButton extends StatelessWidget {
               height: 76,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withOpacity(0.4), width: 1),
+                border:
+                    Border.all(color: Colors.white.withOpacity(0.4), width: 1),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -582,17 +604,24 @@ class _EtherealPlayButton extends StatelessWidget {
             ),
             // Icon
             player.isLoading
-                ? const CircularProgressIndicator(strokeWidth: 3, color: Colors.white)
+                ? const CircularProgressIndicator(
+                    strokeWidth: 3, color: Colors.white)
                 : Icon(
-                    player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    player.isPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
                     color: Colors.white,
                     size: 48,
                   ),
           ],
         ),
-      ).animate(target: player.isPlaying ? 1 : 0)
-       .scale(begin: const Offset(1, 1), end: const Offset(0.92, 0.92), duration: 200.ms)
-       .shimmer(duration: 3.seconds, color: Colors.white.withOpacity(0.3)),
+      )
+          .animate(target: player.isPlaying ? 1 : 0)
+          .scale(
+              begin: const Offset(1, 1),
+              end: const Offset(0.92, 0.92),
+              duration: 200.ms)
+          .shimmer(duration: 3.seconds, color: Colors.white.withOpacity(0.3)),
     );
   }
 }
@@ -622,8 +651,10 @@ class _GlassControlButtonState extends State<_GlassControlButton> {
   @override
   Widget build(BuildContext context) {
     final accent = widget.activeColor ?? Colors.white;
-    final color = widget.isActive ? accent : (_isHovered ? Colors.white : Colors.white.withOpacity(0.6));
-    
+    final color = widget.isActive
+        ? accent
+        : (_isHovered ? Colors.white : Colors.white.withOpacity(0.6));
+
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -634,10 +665,14 @@ class _GlassControlButtonState extends State<_GlassControlButton> {
           width: 54,
           height: 54,
           decoration: BoxDecoration(
-            color: _isHovered ? Colors.white.withOpacity(0.08) : Colors.transparent,
+            color: _isHovered
+                ? Colors.white.withOpacity(0.08)
+                : Colors.transparent,
             shape: BoxShape.circle,
             border: Border.all(
-              color: _isHovered ? Colors.white.withOpacity(0.15) : Colors.transparent,
+              color: _isHovered
+                  ? Colors.white.withOpacity(0.15)
+                  : Colors.transparent,
               width: 1,
             ),
           ),
@@ -645,7 +680,9 @@ class _GlassControlButtonState extends State<_GlassControlButton> {
             widget.icon,
             color: color,
             size: widget.iconSize,
-            shadows: widget.isActive ? [Shadow(color: accent.withOpacity(0.6), blurRadius: 10)] : null,
+            shadows: widget.isActive
+                ? [Shadow(color: accent.withOpacity(0.6), blurRadius: 10)]
+                : null,
           ),
         ),
       ),
@@ -691,31 +728,43 @@ class _LiquidBeamTrackShape extends SliderTrackShape with BaseSliderTrackShape {
       ..color = glowColor.withOpacity(0.4)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
 
-    final activeRect = Rect.fromLTRB(trackRect.left, trackRect.top, thumbCenter.dx, trackRect.bottom);
-    final inactiveRect = Rect.fromLTRB(thumbCenter.dx, trackRect.top, trackRect.right, trackRect.bottom);
+    final activeRect = Rect.fromLTRB(
+        trackRect.left, trackRect.top, thumbCenter.dx, trackRect.bottom);
+    final inactiveRect = Rect.fromLTRB(
+        thumbCenter.dx, trackRect.top, trackRect.right, trackRect.bottom);
 
     // Draw Inactive
-    context.canvas.drawRRect(RRect.fromRectAndRadius(inactiveRect, const Radius.circular(24)), inactivePaint);
-    
+    context.canvas.drawRRect(
+        RRect.fromRectAndRadius(inactiveRect, const Radius.circular(24)),
+        inactivePaint);
+
     // Draw Aura/Glow for Active
-    context.canvas.drawRRect(RRect.fromRectAndRadius(activeRect, const Radius.circular(24)), auraPaint);
-    
+    context.canvas.drawRRect(
+        RRect.fromRectAndRadius(activeRect, const Radius.circular(24)),
+        auraPaint);
+
     // Draw Liquid Beam (Active)
-    context.canvas.drawRRect(RRect.fromRectAndRadius(activeRect, const Radius.circular(24)), activePaint);
-    
+    context.canvas.drawRRect(
+        RRect.fromRectAndRadius(activeRect, const Radius.circular(24)),
+        activePaint);
+
     // Inner Sharp Light Streak
     final streakPaint = Paint()
       ..color = Colors.white.withOpacity(0.3)
       ..style = PaintingStyle.fill;
-    final streakRect = Rect.fromLTRB(trackRect.left + 5, trackRect.top + 2, thumbCenter.dx - 5, trackRect.top + 5);
-    context.canvas.drawRRect(RRect.fromRectAndRadius(streakRect, const Radius.circular(10)), streakPaint);
+    final streakRect = Rect.fromLTRB(trackRect.left + 5, trackRect.top + 2,
+        thumbCenter.dx - 5, trackRect.top + 5);
+    context.canvas.drawRRect(
+        RRect.fromRectAndRadius(streakRect, const Radius.circular(10)),
+        streakPaint);
   }
 }
 
 class _CrystalGlowThumbShape extends RoundSliderThumbShape {
   final Color glowColor;
-  const _CrystalGlowThumbShape({required this.glowColor, double enabledThumbRadius = 14.0}) 
-    : super(enabledThumbRadius: enabledThumbRadius);
+  const _CrystalGlowThumbShape(
+      {required this.glowColor, double enabledThumbRadius = 14.0})
+      : super(enabledThumbRadius: enabledThumbRadius);
 
   @override
   void paint(
@@ -744,9 +793,10 @@ class _CrystalGlowThumbShape extends RoundSliderThumbShape {
     final thumbPaint = Paint()
       ..shader = RadialGradient(
         colors: [Colors.white, glowColor.withOpacity(0.1)],
-      ).createShader(Rect.fromCircle(center: center, radius: enabledThumbRadius));
+      ).createShader(
+          Rect.fromCircle(center: center, radius: enabledThumbRadius));
     canvas.drawCircle(center, enabledThumbRadius, thumbPaint);
-    
+
     // High-Gloss Border
     final borderPaint = Paint()
       ..color = Colors.white
@@ -805,7 +855,8 @@ class _ThickProgressBarPainter extends CustomPainter {
       // Active gradient fill
       final activePaint = Paint()
         ..shader = activeGradient.createShader(activeRect);
-      canvas.drawRRect(RRect.fromRectAndRadius(activeRect, radius), activePaint);
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(activeRect, radius), activePaint);
 
       // Glass streak on top
       final streakRect = Rect.fromLTWH(4, barTop + 3, activeWidth - 8, 4);
@@ -826,7 +877,8 @@ class _ThickProgressBarPainter extends CustomPainter {
       final thumbGlowPaint = Paint()
         ..color = glowColor.withOpacity(0.6)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-      canvas.drawCircle(Offset(thumbX, thumbY), thumbRadius * 1.3, thumbGlowPaint);
+      canvas.drawCircle(
+          Offset(thumbX, thumbY), thumbRadius * 1.3, thumbGlowPaint);
 
       // Thumb body
       final thumbPaint = Paint()..color = thumbColor;

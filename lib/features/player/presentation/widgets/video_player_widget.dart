@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -9,6 +10,7 @@ import 'package:chewie/chewie.dart';
 class VideoPlayerWidget extends StatefulWidget {
   final String songId;
   final String streamUrl;
+  final String coverUrl;
   final bool isPlaying;
   final Duration position;
 
@@ -16,6 +18,7 @@ class VideoPlayerWidget extends StatefulWidget {
     super.key,
     required this.songId,
     required this.streamUrl,
+    required this.coverUrl,
     required this.isPlaying,
     required this.position,
   });
@@ -25,60 +28,32 @@ class VideoPlayerWidget extends StatefulWidget {
 }
 
 class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
+  // ── media_kit (Windows) ───────────────────────────────────────────────────
   Player? _mkPlayer;
   VideoController? _mkController;
 
+  // ── video_player + chewie (Mobile) ────────────────────────────────────────
   vp.VideoPlayerController? _vpController;
   ChewieController? _chewieController;
 
-  bool _isInitialized = false;
+  // ── State ─────────────────────────────────────────────────────────────────
+  bool _videoReady = false;   // video decoded & can paint frames
+  bool _hasError = false;     // network / decode failure
   String? _loadedUrl;
-  String _debugInfo = 'Starting...';
-  int _textureId = -1;
-  
-  Timer? _pollingTimer;
-  List<StreamSubscription> _subscriptions = [];
 
+  Timer? _pollingTimer;
+  final List<StreamSubscription> _subscriptions = [];
+
+  // ─────────────────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
-    debugPrint('[VideoPlayer] initState');
     _initializePlayer();
-    
-    _pollingTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
-      _checkTexture();
-    });
-  }
-
-  void _setupWindowsListeners() {
-    if (_mkPlayer == null) return;
-    _subscriptions.add(_mkPlayer!.stream.playing.listen((playing) {
-      if (mounted) {
-        setState(() {
-          final state = _mkPlayer!.state;
-          _debugInfo = 'Res: ${state.width}x${state.height} | Tracks: ${state.tracks.video.length} | Play: $playing';
-        });
-      }
-    }));
-    _subscriptions.add(_mkPlayer!.stream.width.listen((width) {
-      if (mounted) {
-        setState(() {
-          final state = _mkPlayer!.state;
-          _debugInfo = 'Res: ${width}x${state.height} | Tracks: ${state.tracks.video.length} | Play: ${state.playing}';
-        });
-      }
-    }));
-  }
-
-  void _checkTexture() {
-    if (_mkController != null && mounted) {
-      final newTextureId = _mkController!.id.value ?? -1;
-      if (newTextureId != _textureId && newTextureId > 0) {
-        debugPrint('[VideoPlayer] Texture poll: $_textureId -> $newTextureId');
-        setState(() {
-          _textureId = newTextureId;
-        });
-      }
+    // Poll texture availability on Windows
+    if (Platform.isWindows) {
+      _pollingTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
+        _checkWindowsTexture();
+      });
     }
   }
 
@@ -87,10 +62,18 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.streamUrl != widget.streamUrl) {
       _initializePlayer();
-    } else if (_isInitialized) {
+    } else if (_videoReady) {
       _syncPlayback();
     }
   }
+
+  @override
+  void dispose() {
+    _disposeControllers();
+    super.dispose();
+  }
+
+  // ── Playback sync ─────────────────────────────────────────────────────────
 
   void _syncPlayback() {
     if (Platform.isWindows) {
@@ -114,11 +97,17 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     }
   }
 
+  // ── Initialization ────────────────────────────────────────────────────────
+
   Future<void> _initializePlayer() async {
-    if (_loadedUrl == widget.streamUrl && _isInitialized) return;
+    if (_loadedUrl == widget.streamUrl && _videoReady) return;
     _loadedUrl = widget.streamUrl;
 
     await _disposeControllers();
+    if (!mounted) return;
+
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (!mounted) return;
 
     if (Platform.isWindows) {
       await _initWindowsNative();
@@ -127,118 +116,140 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     }
   }
 
+  // ── Windows (media_kit) ───────────────────────────────────────────────────
+
   Future<void> _initWindowsNative() async {
     try {
-      _debugInfo = '1. Creating Player...';
-      if (mounted) setState(() {});
-      
       _mkPlayer = Player();
       _setupWindowsListeners();
 
-      // Configuración de RED y CACHÉ (Evitar I/O Errors y Hangs en Windows)
-      final player = _mkPlayer;
-      if (player is dynamic) {
-        try {
-          await (player as dynamic).setProperty('ytdl', 'no');
-          await (player as dynamic).setProperty('cache', 'no'); 
-          await (player as dynamic).setProperty('demuxer-max-bytes', '67108864'); 
-          await (player as dynamic).setProperty('tls-verify', 'no');
-          await (player as dynamic).setProperty('network-timeout', '15');
-          await (player as dynamic).setProperty('hwdec', 'auto-safe'); 
-          await (player as dynamic).setProperty('vo', 'gpu');
-          await (player as dynamic).setProperty('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
-        } catch (e) {
-          debugPrint('[VideoPlayer] MPV Property Error: $e');
-        }
-      }
-      
-      _debugInfo = '2. Creating VideoController...';
-      if (mounted) setState(() {});
-      
+      // MPV options (video-only overlay, no audio re-output)
+      final player = _mkPlayer as dynamic;
+      try {
+        await player.setProperty('ao', 'null');
+        await player.setProperty('cache', 'no');
+        await player.setProperty('tls-verify', 'no');
+        await player.setProperty('network-timeout', '15');
+        await player.setProperty('hwdec', 'auto-safe');
+        await player.setProperty(
+          'user-agent',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+          '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        );
+      } catch (_) {}
+
       _mkController = VideoController(
         _mkPlayer!,
         configuration: const VideoControllerConfiguration(
           enableHardwareAcceleration: true,
         ),
       );
-      
-      _textureId = _mkController!.id.value ?? -1;
-      _debugInfo = '3. Setting volume...';
-      if (mounted) setState(() {});
+
       await _mkPlayer!.setVolume(0);
 
       if (widget.streamUrl.isNotEmpty) {
-        final shortUrl = widget.streamUrl.length > 30 ? widget.streamUrl.substring(0, 30) : widget.streamUrl;
-        _debugInfo = '4. Opening: $shortUrl...';
-        if (mounted) setState(() {});
-        
         final media = Media(
           widget.streamUrl,
           httpHeaders: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
             'Referer': 'https://www.youtube.com',
           },
         );
-        
         await _mkPlayer!.open(media, play: widget.isPlaying);
         await _mkPlayer!.setVideoTrack(VideoTrack.auto());
         await _mkPlayer!.seek(widget.position);
       }
-
-      // Dejar que el motor respire y cargue el primer frame
-      await Future.delayed(const Duration(seconds: 3));
-
-      final state = _mkPlayer!.state;
-      final playing = state.playing;
-      final tracks = state.tracks.video.length;
-      final width = state.width;
-      final height = state.height;
-      
-      _debugInfo = 'Res: ${width}x${height} | Tracks: $tracks | Play: $playing';
-      
-      if (mounted) {
-        setState(() {
-          _isInitialized = true;
-        });
-      }
-    } catch (e, st) {
-      _debugInfo = 'ERROR: $e';
-      debugPrint('[VideoPlayer] ERROR: $e');
-      debugPrint('[VideoPlayer] Stack: $st');
+    } catch (e) {
+      debugPrint('[VideoPlayer] Windows init error: $e');
+      if (mounted) setState(() => _hasError = true);
     }
   }
 
+  void _setupWindowsListeners() {
+    if (_mkPlayer == null) return;
+
+    // Mark ready once we get a valid resolution
+    _subscriptions.add(_mkPlayer!.stream.width.listen((width) {
+      if (width != null && width > 0 && mounted && !_videoReady) {
+        setState(() {
+          _videoReady = true;
+          _hasError = false;
+        });
+      }
+    }));
+
+    _subscriptions.add(_mkPlayer!.stream.error.listen((err) {
+      if (err.isNotEmpty && mounted) {
+        debugPrint('[VideoPlayer] Stream error: $err');
+        setState(() => _hasError = true);
+      }
+    }));
+  }
+
+  void _checkWindowsTexture() {
+    if (_mkController == null || !mounted) return;
+    final texId = _mkController!.id.value ?? -1;
+    if (texId > 0 && !_videoReady) {
+      setState(() {
+        _videoReady = true;
+        _hasError = false;
+      });
+    }
+  }
+
+  // ── Mobile (video_player + chewie) ────────────────────────────────────────
+
   Future<void> _initMobilePlayer() async {
-    _vpController = vp.VideoPlayerController.networkUrl(Uri.parse(widget.streamUrl));
     try {
+      _vpController = vp.VideoPlayerController.networkUrl(
+        Uri.parse(widget.streamUrl),
+        videoPlayerOptions: vp.VideoPlayerOptions(mixWithOthers: true),
+        httpHeaders: {
+          'User-Agent':
+              'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
+              '(KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+          'Referer': 'https://www.youtube.com',
+        },
+      );
+
       await _vpController!.initialize();
       await _vpController!.setVolume(0);
+
       _chewieController = ChewieController(
         videoPlayerController: _vpController!,
         autoPlay: widget.isPlaying,
         showControls: false,
         aspectRatio: _vpController!.value.aspectRatio,
       );
+
       if (mounted) {
-        setState(() => _isInitialized = true);
+        setState(() {
+          _videoReady = true;
+          _hasError = false;
+        });
       }
     } catch (e) {
-      debugPrint('Mobile Video Player Error: $e');
+      debugPrint('[VideoPlayer] Mobile init error: $e');
+      if (mounted) setState(() => _hasError = true);
     }
   }
 
+  // ── Cleanup ───────────────────────────────────────────────────────────────
+
   Future<void> _disposeControllers() async {
-    _isInitialized = false;
+    _videoReady = false;
+    _hasError = false;
+
     _pollingTimer?.cancel();
     _pollingTimer = null;
 
-    for (var s in _subscriptions) {
-      s.cancel();
-    }
+    for (final s in _subscriptions) s.cancel();
     _subscriptions.clear();
-    
+
     final mk = _mkPlayer;
-    final vp = _vpController;
+    final vpCtrl = _vpController;
     final ch = _chewieController;
 
     _mkPlayer = null;
@@ -246,106 +257,58 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     _vpController = null;
     _chewieController = null;
 
-    if (ch != null) ch.dispose();
-    if (vp != null) await vp.dispose();
+    ch?.dispose();
+    if (vpCtrl != null) await vpCtrl.dispose();
     if (mk != null) await mk.dispose();
   }
 
-  @override
-  void dispose() {
-    _disposeControllers();
-    super.dispose();
-  }
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('[VideoPlayer] BUILD: isInit=$_isInitialized, texture=$_textureId');
-    
-    if (!_isInitialized) {
-      return Container(
-        color: Colors.black,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(color: Colors.white24, strokeWidth: 2),
-              const SizedBox(height: 16),
-              Text(
-                _debugInfo,
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ],
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // ── Layer 1: Cover art (always present as background) ────────────────
+        CachedNetworkImage(
+          imageUrl: widget.coverUrl,
+          fit: BoxFit.cover,
+          placeholder: (_, __) => Container(color: Colors.black),
+          errorWidget: (_, __, ___) => Container(color: Colors.black),
+        ),
+
+        // ── Layer 2: Video (fades in on top when ready, hidden on error) ─────
+        if (!_hasError)
+          AnimatedOpacity(
+            opacity: _videoReady ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 600),
+            curve: Curves.easeIn,
+            child: _buildVideoLayer(),
           ),
-        ),
-      );
-    }
 
-    if (Platform.isWindows && _mkController != null) {
-      return Container(
-        color: Colors.black,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (_isInitialized)
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Video(
-                  controller: _mkController!,
-                  fill: Colors.black,
-                  fit: BoxFit.contain,
-                ),
-              )
-            else
-              const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(color: Colors.white24, strokeWidth: 2),
-                    SizedBox(height: 16),
-                    Text(
-                      'Cargando video...',
-                      style: TextStyle(color: Colors.white54, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            Positioned(
-              bottom: 8,
-              left: 8,
-              right: 8,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                color: Colors.black54,
-                child: Text(
-                  _debugInfo,
-                  style: const TextStyle(color: Colors.white, fontSize: 11),
-                ),
-              ),
+        // ── Layer 3: Centered loading indicator (only while loading) ─────────
+        if (!_videoReady && !_hasError)
+          const Center(
+            child: CircularProgressIndicator(
+              color: Colors.white54,
+              strokeWidth: 2,
             ),
-          ],
-        ),
-      );
-    }
-
-    if (_chewieController != null) {
-      return Container(
-        color: Colors.black,
-        child: Chewie(controller: _chewieController!),
-      );
-    }
-
-    return const SizedBox.shrink();
+          ),
+      ],
+    );
   }
-}
 
-class RawTexture extends StatelessWidget {
-  final int textureId;
-  
-  const RawTexture({super.key, required this.textureId});
-
-  @override
-  Widget build(BuildContext context) {
-    return Texture(textureId: textureId);
+  Widget _buildVideoLayer() {
+    if (Platform.isWindows && _mkController != null) {
+      return Video(
+        controller: _mkController!,
+        fill: Colors.transparent,
+        fit: BoxFit.cover,
+      );
+    }
+    if (_chewieController != null) {
+      return Chewie(controller: _chewieController!);
+    }
+    return const SizedBox.shrink();
   }
 }
