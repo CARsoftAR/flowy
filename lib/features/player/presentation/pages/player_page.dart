@@ -86,10 +86,7 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
                               position: player.position,
                               onTap: () => setState(() => _showLyrics = false),
                             )
-                          : (song.isVideo || _hasVideoUrl(player, song)
-                              ? _buildVideoSection(song, player)
-                              : _buildArtworkSection(
-                                  song, player.dominantColor)),
+                          : _buildVideoSection(song, player),
                     ),
                   ),
                   _buildSongInfo(context, player, song),
@@ -222,11 +219,12 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
                     duration: const Duration(milliseconds: 800),
                     curve: Curves.easeInOut,
                     child: CachedNetworkImage(
-                          imageUrl: song.bestThumbnail,
-                          fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(color: Colors.black),
-                          errorWidget: (_, __, ___) => Container(color: Colors.black),
-                        ),
+                      imageUrl: song.bestThumbnail,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(color: Colors.black),
+                      errorWidget: (_, __, ___) =>
+                          Container(color: Colors.black),
+                    ),
                   ),
                 ),
               ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(
@@ -248,31 +246,38 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
 
   Widget _buildVideoSection(SongEntity song, pp.PlayerProvider player) {
     final streamUrl = player.handler.getCachedVideoUrl(song.id);
+    final hasVideo = streamUrl != null && streamUrl.isNotEmpty;
+    debugPrint(
+        '🎥 VideoSection: hasVideo=$hasVideo, url=${streamUrl?.substring(0, 30)}');
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: AspectRatio(
         aspectRatio: 16 / 9,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            boxShadow:
-                FlowyTheme.glowShadow(player.dominantColor, intensity: 0.3),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: streamUrl != null && streamUrl.isNotEmpty
-              ? VideoPlayerWidget(
-                  songId: song.id,
-                  streamUrl: streamUrl,
-                  coverUrl: song.bestThumbnail,
-                  isPlaying: player.isPlaying,
-                  position: player.position,
-                )
-              : CachedNetworkImage(
-                  imageUrl: song.bestThumbnail,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(color: Colors.black),
-                  errorWidget: (_, __, ___) => Container(color: Colors.black),
-                ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Capa base (fondo): carátula - solo visible si NO hay video
+            if (!hasVideo)
+              CachedNetworkImage(
+                imageUrl: song.bestThumbnail,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(color: Colors.black),
+                errorWidget: (_, __, ___) => Container(color: Colors.black),
+              ),
+            // Capa video (superior): intenta reproducir si hay URL
+            if (hasVideo)
+              VideoPlayerWidget(
+                key: ValueKey('${streamUrl}_${song.id}'),
+                songId: song.id,
+                streamUrl: streamUrl,
+                coverUrl: song.bestThumbnail,
+                isPlaying: player.isPlaying,
+                position: player.position,
+              )
+            else
+              Container(color: Colors.black54),
+          ],
         ),
       ),
     );

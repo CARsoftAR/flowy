@@ -117,12 +117,24 @@ class _MiniPlayerState extends State<MiniPlayer>
         // Resetear animación si es una canción nueva
         _resetIfNewSong(song.id);
 
-        // Mostrar banner de error si hay un problema
+        // Si hay error, mostramos el contenido normal pero con el mensaje de error
+        // (el usuario pidió quitar el cartel rojo gigante)
         if (player.hasError) {
-          return _ErrorBanner(
-            message: player.errorMessage ?? 'Error de reproducción',
-            onDismiss: player.clearError,
-            onRetry: () => player.playSong(song, queue: player.queue),
+           return AnimatedOpacity(
+            opacity: _opacity,
+            duration: const Duration(milliseconds: 120),
+            child: GestureDetector(
+              onTap: () {
+                HapticEngine.medium();
+                player.playSong(song, queue: player.queue);
+              },
+              child: _MiniPlayerContent(
+                song: song, 
+                player: player, 
+                isError: true,
+                errorMessage: player.errorMessage,
+              ),
+            ),
           );
         }
 
@@ -155,8 +167,15 @@ class _MiniPlayerState extends State<MiniPlayer>
 class _MiniPlayerContent extends StatelessWidget {
   final SongEntity song;
   final PlayerProvider player;
+  final bool isError;
+  final String? errorMessage;
 
-  const _MiniPlayerContent({required this.song, required this.player});
+  const _MiniPlayerContent({
+    required this.song, 
+    required this.player,
+    this.isError = false,
+    this.errorMessage,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -231,17 +250,17 @@ class _MiniPlayerContent extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       FlowyMarquee(
-                        text: song.title,
+                        text: isError ? (errorMessage ?? 'Reconectando...') : song.title,
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          color: isError ? scheme.error : Colors.white,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        song.artist,
+                        isError ? 'Toca para reintentar' : song.artist,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.white70,
+                          color: isError ? scheme.error.withOpacity(0.7) : Colors.white70,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -359,14 +378,14 @@ class _PlayPauseButton extends StatelessWidget {
                 color: Colors.black.withOpacity(0.35),
               ),
             ),
-            player.isLoading
-                ? const Center(
+            (player.isLoading || isError)
+                ? Center(
                     child: SizedBox(
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: isError ? Colors.redAccent : Colors.white,
                       ),
                     ),
                   )

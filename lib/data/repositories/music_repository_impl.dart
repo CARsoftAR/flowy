@@ -155,135 +155,159 @@ class MusicRepositoryImpl implements MusicRepository {
       return Left(YoutubeFailure('Invalid video ID format'));
     }
 
-    // ── MOTOR 1: Invidious /latest_version (Proxy Real) ──────────────────────
-    // Priorizamos la antena de Chile (nadeko) que es la más sana hoy.
-    try {
-      final baseUrl = FlowyEngine.currentApiUrl;
-      _log.d('Invidious: Intentando con $baseUrl para $videoId');
+    // ── LISTA DE FALLBACKS: Múltiples instancias Invidious ─────────────
+    final _invidiousInstances = [
+      'https://inv.nadeko.net', // Chile - usually fastest
+      'https://invidious.privacyredirect.com', // Privacy-based
+      'https://yewtu.be', // Europe
+      'https://invidious.nerdvpn.de', // Germany
+      'https://invidious.no-logs.com', // Privacy
+      'https://inv.tux.pizza', // US
+      'https://iv.ggtyler.dev', // US
+    ];
 
-      final metaRes = await http.get(
-        Uri.parse('$baseUrl/api/v1/videos/$videoId'),
-        headers: {
-          'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36',
-          'Accept': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 5));
+    String? lastError;
 
-      if (metaRes.statusCode == 200) {
-        final data = json.decode(metaRes.body);
-        String? streamUrl;
+    // ── MOTOR 1: Invidious con fallback automático ───────────────────────
+    for (final baseUrl in _invidiousInstances) {
+      try {
+        _log.d('Invidious: Probando $baseUrl para $videoId');
 
-        if (isVideo) {
-          // Buscar en formatStreams (muxed: video+audio juntos)
-          final formatStreams = data['formatStreams'] as List<dynamic>?;
-          if (formatStreams != null && formatStreams.isNotEmpty) {
-            formatStreams.sort((a, b) {
-              final resA = int.tryParse(a['resolution']
-                          ?.toString()
-                          .replaceAll('p', '')
-                          .replaceAll('x', '') ??
-                      '0') ??
-                  0;
-              final resB = int.tryParse(b['resolution']
-                          ?.toString()
-                          .replaceAll('p', '')
-                          .replaceAll('x', '') ??
-                      '0') ??
-                  0;
-              return resB.compareTo(resA);
-            });
-            streamUrl = formatStreams.first['url']?.toString();
-            _log.d(
-                'Invidious: Video muxed ${formatStreams.first['resolution']} → $streamUrl');
-          }
-        }
+        final metaRes = await http.get(
+          Uri.parse('$baseUrl/api/v1/videos/$videoId'),
+          headers: {
+            'User-Agent':
+                'com.google.android.youtube/19.05.36 (Linux; U; Android 14; en_US; Pixel 8 Pro) gzip',
+            'X-YouTube-Client-Name': '3',
+            'X-YouTube-Client-Version': '19.05.36',
+            'Accept': 'application/json',
+          },
+        ).timeout(const Duration(seconds: 10));
 
-        if (streamUrl != null && streamUrl.isNotEmpty) {
-          _log.i('Invidious Video OK → $streamUrl');
-          return Right(streamUrl);
-        }
+        if (metaRes.statusCode == 200) {
+          final data = json.decode(metaRes.body);
+          String? streamUrl;
 
-        int? bestItag;
-        final adaptiveFormats = data['adaptiveFormats'] as List<dynamic>?;
-
-        if (bestItag == null && adaptiveFormats != null) {
-          // Prioridad Audio: mp4 (AAC — codec nativo Android)
-          final mp4Audio = adaptiveFormats!.where((f) {
-            final type = f['type']?.toString() ?? '';
-            return type.contains('audio') && type.contains('mp4');
-          }).toList();
-
-          if (mp4Audio.isNotEmpty) {
-            mp4Audio.sort((a, b) => ((b['bitrate'] as num?)?.toInt() ?? 0)
-                .compareTo((a['bitrate'] as num?)?.toInt() ?? 0));
-            bestItag = mp4Audio.first['itag'] as int?;
-            _log.d('Invidious: itag MP4/AAC → $bestItag');
-          }
-
-          // Fallback: audio/webm (Opus)
-          if (bestItag == null) {
-            final webmAudio = adaptiveFormats!.where((f) {
-              final type = f['type']?.toString() ?? '';
-              return type.contains('audio') && type.contains('webm');
-            }).toList();
-            if (webmAudio.isNotEmpty) {
-              webmAudio.sort((a, b) => ((b['bitrate'] as num?)?.toInt() ?? 0)
-                  .compareTo((a['bitrate'] as num?)?.toInt() ?? 0));
-              bestItag = webmAudio.first['itag'] as int?;
-              _log.d('Invidious: itag WebM/Opus → $bestItag');
+          if (isVideo) {
+            // Buscar en formatStreams (muxed: video+audio juntos)
+            final formatStreams = data['formatStreams'] as List<dynamic>?;
+            if (formatStreams != null && formatStreams.isNotEmpty) {
+              formatStreams.sort((a, b) {
+                final resA = int.tryParse(a['resolution']
+                            ?.toString()
+                            .replaceAll('p', '')
+                            .replaceAll('x', '') ??
+                        '0') ??
+                    0;
+                final resB = int.tryParse(b['resolution']
+                            ?.toString()
+                            .replaceAll('p', '')
+                            .replaceAll('x', '') ??
+                        '0') ??
+                    0;
+                return resB.compareTo(resA);
+              });
+              streamUrl = formatStreams.first['url']?.toString();
+              _log.d(
+                  'Invidious: Video muxed ${formatStreams.first['resolution']} → $streamUrl');
             }
           }
-        }
 
-        if (bestItag != null) {
-          // URL correcta del proxy Invidious — el servidor sirve el audio directamente
-          final proxyUrl =
-              '$baseUrl/latest_version?id=$videoId&itag=$bestItag&local=true';
-          print('URL FINAL DE AUDIO: $proxyUrl');
-          _log.i('Invidious Proxy OK → $proxyUrl');
-          return Right(proxyUrl);
+          if (streamUrl != null && streamUrl.isNotEmpty) {
+            _log.i('Invidious Video OK → $streamUrl');
+            return Right(streamUrl);
+          }
+
+          int? bestItag;
+          final adaptiveFormats = data['adaptiveFormats'] as List<dynamic>?;
+
+          if (bestItag == null && adaptiveFormats != null) {
+            // Prioridad Audio: mp4 (AAC — codec nativo Android)
+            final mp4Audio = adaptiveFormats!.where((f) {
+              final type = f['type']?.toString() ?? '';
+              return type.contains('audio') && type.contains('mp4');
+            }).toList();
+
+            if (mp4Audio.isNotEmpty) {
+              mp4Audio.sort((a, b) => ((b['bitrate'] as num?)?.toInt() ?? 0)
+                  .compareTo((a['bitrate'] as num?)?.toInt() ?? 0));
+              bestItag = mp4Audio.first['itag'] as int?;
+              _log.d('Invidious: itag MP4/AAC → $bestItag');
+            }
+
+            // Fallback: audio/webm (Opus)
+            if (bestItag == null) {
+              final webmAudio = adaptiveFormats!.where((f) {
+                final type = f['type']?.toString() ?? '';
+                return type.contains('audio') && type.contains('webm');
+              }).toList();
+              if (webmAudio.isNotEmpty) {
+                webmAudio.sort((a, b) => ((b['bitrate'] as num?)?.toInt() ?? 0)
+                    .compareTo((a['bitrate'] as num?)?.toInt() ?? 0));
+                bestItag = webmAudio.first['itag'] as int?;
+                _log.d('Invidious: itag WebM/Opus → $bestItag');
+              }
+            }
+          }
+
+          if (bestItag != null) {
+            // URL correcta del proxy Invidious — el servidor sirve el audio directamente
+            final proxyUrl =
+                '$baseUrl/latest_version?id=$videoId&itag=$bestItag&local=true';
+            print('URL FINAL DE AUDIO: $proxyUrl');
+            _log.i('Invidious Proxy OK → $proxyUrl');
+            return Right(proxyUrl);
+          }
         }
+      } catch (e) {
+        lastError = e.toString();
+        _log.w('Invidious $baseUrl falló: $e. Intentando siguiente...');
+        continue; // Próxima instancia
       }
-    } catch (e) {
-      _log.w('Invidious falló: $e. Usando YoutubeExplode como fallback.');
     }
 
-    // ── MOTOR 2: YoutubeExplode (Fallback Nativo) ────────────────────────────
+    // Si ninguna instancia funcionó, usamos YoutubeExplode como último recurso
+    _log.w('Todas las instancias Invidious fallaron: $lastError');
+
+    // ── MOTOR 2: YoutubeExplode (Fallback Nativo con Reintentos) ─────────────
     _log.d('YoutubeExplode: Intentando extracción nativa para $videoId');
 
-    bool isLiveStream = false;
-    Duration? videoDuration;
-    try {
-      final video =
-          await _yt.videos.get(videoId).timeout(const Duration(seconds: 10));
-      isLiveStream = video.isLive;
-      videoDuration = video.duration;
-    } catch (e) {
-      _log.w('Native metadata failed: $e');
+    // Intentar hasta 2 veces con YoutubeExplode con diferentes clientes
+    for (int retry = 0; retry < 2; retry++) {
+      try {
+        bool isLiveStream = false;
+        Duration? videoDuration;
+        
+        // Metadata fetch
+        final video = await _yt.videos.get(videoId).timeout(const Duration(seconds: 12));
+        isLiveStream = video.isLive;
+        videoDuration = video.duration;
+
+        if (isLiveStream || videoDuration == null || videoDuration == Duration.zero) {
+          final nativeUrl = await _getHttpLiveStreamUrl(videoId);
+          if (nativeUrl != null) return Right(nativeUrl);
+          final hlsUrl = await _getLiveStreamUrl(videoId);
+          if (hlsUrl != null) return Right(hlsUrl);
+        } else {
+          // Intentar estrategias de manifest
+          for (final strategy in _getStrategies(isVideo)) {
+            final result = await strategy(videoId);
+            if (result != null) return Right(result);
+          }
+        }
+      } catch (e) {
+        _log.w('Retry $retry for $videoId failed: $e');
+        // Pequeña espera antes del reintento
+        await Future.delayed(Duration(milliseconds: 500 * (retry + 1)));
+      }
     }
 
-    if (isLiveStream ||
-        videoDuration == null ||
-        videoDuration == Duration.zero) {
-      final nativeUrl = await _getHttpLiveStreamUrl(videoId);
-      if (nativeUrl != null) return Right(nativeUrl);
-      final hlsUrl = await _getLiveStreamUrl(videoId);
-      if (hlsUrl != null) return Right(hlsUrl);
-      return Left(StreamFailure('No se pudo obtener URL de stream en vivo.',
-          videoId: videoId));
-    }
-
-    for (final strategy in _getStrategies(isVideo)) {
-      final result = await strategy(videoId);
-      if (result != null) return Right(result);
-    }
-
-    final hlsLastResort = await _getLiveStreamUrl(videoId);
-    if (hlsLastResort != null) return Right(hlsLastResort);
+    // Fallback final: Piped API
+    final pipedUrl = await _getPipedStreamUrl(videoId);
+    if (pipedUrl != null) return Right(pipedUrl);
 
     return Left(StreamFailure(
-      'No se pudo conectar con el motor de streaming. Verificá tu conexión.',
+      'No se pudo conectar con el motor de streaming tras varios intentos. Reintentando...',
       videoId: videoId,
     ));
   }

@@ -242,35 +242,37 @@ class FlowyAudioHandler extends BaseAudioHandler
 
     String? streamUrl;
     try {
-      // Check if it's a direct stream (radio or external URL)
-      if (song.isDirectStream &&
-          song.streamUrl != null &&
-          song.streamUrl!.startsWith('http')) {
-        streamUrl = song.streamUrl;
-        _writeDebug('Using direct stream URL');
-      } else if (song.streamUrl != null && song.streamUrl!.startsWith('http')) {
-        // Already have a direct URL
-        streamUrl = song.streamUrl;
-      } else {
-        // Timeout aumentado a 25s — Invidious necesita hasta 15s para responder.
-        // Con 10s se cancelaba la llamada antes de tiempo, mostrando 'nada' al usuario.
-        final result = await _musicRepo
-            .getStreamUrl(song.id, isVideo: song.isVideo)
-            .timeout(const Duration(seconds: 25));
-        streamUrl = result.getOrElse(
-            () => throw Exception('No se pudo obtener URL del stream'));
+    int retries = 0;
+    while (retries < 3) {
+      try {
+        if (song.isDirectStream &&
+            song.streamUrl != null &&
+            song.streamUrl!.startsWith('http')) {
+          streamUrl = song.streamUrl;
+          _writeDebug('Using direct stream URL');
+        } else if (song.streamUrl != null && song.streamUrl!.startsWith('http')) {
+          streamUrl = song.streamUrl;
+        } else {
+          final result = await _musicRepo
+              .getStreamUrl(song.id, isVideo: song.isVideo)
+              .timeout(const Duration(seconds: 25));
+          streamUrl = result.getOrElse(
+              () => throw Exception('No se pudo obtener URL del stream'));
+        }
+        _urlCache[song.id] = streamUrl;
+        customEvent.add({'type': 'url_resolved', 'songId': song.id});
+        _writeDebug('Stream Resolved Sucessfully');
+        break; // Exit loop if successful
+      } catch (e) {
+        retries++;
+        _writeDebug('❌ Attempt $retries failed: $e');
+        if (retries >= 3) {
+          final errorMsg = 'Reconectando con el servidor...';
+          onError?.call(errorMsg);
+          return;
+        }
+        await Future.delayed(Duration(seconds: 2 * retries));
       }
-      _urlCache[song.id] = streamUrl;
-      customEvent.add({'type': 'url_resolved', 'songId': song.id});
-      _writeDebug('Stream Resolved Sucessfully');
-    } catch (e) {
-      final errorMsg = e.toString().contains('TimeoutException')
-          ? 'El servidor tardó demasiado. Probá refrescando el motor.'
-          : 'Error al obtener el audio: $e';
-      _writeDebug('❌ Resolution Error: $errorMsg');
-      print('ERROR DE CARGA: $errorMsg');
-      onError?.call(errorMsg);
-      return;
     }
 
     // Check if it's an HLS stream (m3u8)
@@ -341,7 +343,7 @@ class FlowyAudioHandler extends BaseAudioHandler
     } catch (e) {
       _writeDebug('Native Player Fail: $e');
       if (!isHls) {
-        onError?.call('Fallo del reproductor: El archivo no es reproducible.');
+        onError?.call('Reconectando con el servidor...');
       }
     }
   }

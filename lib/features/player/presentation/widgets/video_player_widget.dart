@@ -37,9 +37,14 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   ChewieController? _chewieController;
 
   // ── State ─────────────────────────────────────────────────────────────────
-  bool _videoReady = false;   // video decoded & can paint frames
-  bool _hasError = false;     // network / decode failure
+  bool _videoReady = false; // video decoded & can paint frames
+  bool _hasError = false; // network / decode failure
+  bool _isLoading = true; // loading state for UI
   String? _loadedUrl;
+  Timer? _timeoutTimer;
+
+  // ValueNotifier para reactividad real
+  final ValueNotifier<bool> _videoReadyNotifier = ValueNotifier(false);
 
   Timer? _pollingTimer;
   final List<StreamSubscription> _subscriptions = [];
@@ -55,13 +60,38 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         _checkWindowsTexture();
       });
     }
+    // Timeout: 5 seconds max to initialize
+    _timeoutTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted && !_videoReady) {
+        debugPrint('[VideoPlayer] Timeout - showing cover');
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
+    });
   }
 
   @override
   void didUpdateWidget(VideoPlayerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.streamUrl != widget.streamUrl) {
+      debugPrint('[VideoPlayer] URL changed - full reset');
+      _disposeControllers();
+      _isLoading = true;
+      _hasError = false;
+      _videoReady = false;
       _initializePlayer();
+      // Reset timeout
+      _timeoutTimer?.cancel();
+      _timeoutTimer = Timer(const Duration(seconds: 5), () {
+        if (mounted && !_videoReady) {
+          setState(() {
+            _hasError = true;
+            _isLoading = false;
+          });
+        }
+      });
     } else if (_videoReady) {
       _syncPlayback();
     }
@@ -69,6 +99,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   @override
   void dispose() {
+    _timeoutTimer?.cancel();
+    _pollingTimer?.cancel();
     _disposeControllers();
     super.dispose();
   }
@@ -83,7 +115,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       } else if (!widget.isPlaying && _mkPlayer!.state.playing) {
         _mkPlayer!.pause();
       }
-      final diff = (widget.position - _mkPlayer!.state.position).inSeconds.abs();
+      final diff =
+          (widget.position - _mkPlayer!.state.position).inSeconds.abs();
       if (diff > 2) _mkPlayer!.seek(widget.position);
     } else {
       if (_vpController == null || !_vpController!.value.isInitialized) return;
@@ -92,7 +125,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       } else if (!widget.isPlaying && _vpController!.value.isPlaying) {
         _vpController!.pause();
       }
-      final diff = (widget.position - _vpController!.value.position).inSeconds.abs();
+      final diff =
+          (widget.position - _vpController!.value.position).inSeconds.abs();
       if (diff > 2) _vpController!.seekTo(widget.position);
     }
   }
@@ -134,7 +168,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         await player.setProperty(
           'user-agent',
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-          '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+              '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         );
       } catch (_) {}
 
@@ -153,7 +187,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
           httpHeaders: {
             'User-Agent':
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
             'Referer': 'https://www.youtube.com',
           },
         );
@@ -209,7 +243,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         httpHeaders: {
           'User-Agent':
               'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
-              '(KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                  '(KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
           'Referer': 'https://www.youtube.com',
         },
       );
@@ -225,14 +259,19 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       );
 
       if (mounted) {
+        debugPrint(
+            '[VideoPlayer] Mobile initialized OK - isInit=${_vpController!.value.isInitialized}');
         setState(() {
           _videoReady = true;
           _hasError = false;
+          _isLoading = false;
         });
+        _videoReadyNotifier.value = true;
       }
     } catch (e) {
       debugPrint('[VideoPlayer] Mobile init error: $e');
       if (mounted) setState(() => _hasError = true);
+      _videoReadyNotifier.value = false;
     }
   }
 
@@ -241,6 +280,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   Future<void> _disposeControllers() async {
     _videoReady = false;
     _hasError = false;
+    _isLoading = true;
+    _videoReadyNotifier.value = false;
 
     _pollingTimer?.cancel();
     _pollingTimer = null;
@@ -266,35 +307,46 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // ── Layer 1: Cover art (always present as background) ────────────────
-        CachedNetworkImage(
-          imageUrl: widget.coverUrl,
-          fit: BoxFit.cover,
-          placeholder: (_, __) => Container(color: Colors.black),
-          errorWidget: (_, __, ___) => Container(color: Colors.black),
-        ),
+    return ValueListenableBuilder<bool>(
+      valueListenable: _videoReadyNotifier,
+      builder: (context, videoReady, child) {
+        debugPrint(
+            '🎬 Build: videoReady=$videoReady, hasError=$_hasError, isLoading=$_isLoading');
 
-        // ── Layer 2: Video (fades in on top when ready, hidden on error) ─────
-        if (!_hasError)
-          AnimatedOpacity(
-            opacity: _videoReady ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 600),
-            curve: Curves.easeIn,
-            child: _buildVideoLayer(),
-          ),
-
-        // ── Layer 3: Centered loading indicator (only while loading) ─────────
-        if (!_videoReady && !_hasError)
-          const Center(
-            child: CircularProgressIndicator(
-              color: Colors.white54,
-              strokeWidth: 2,
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // ── Layer 1: Cover art (background) ────────────────────────────────
+            CachedNetworkImage(
+              imageUrl: widget.coverUrl,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => Container(color: Colors.black),
+              errorWidget: (_, __, ___) => Container(color: Colors.black),
             ),
-          ),
-      ],
+
+            // ── Layer 2: Video (only visible when ready, no fade) ────────────
+            if (!_hasError && videoReady) _buildVideoLayer(),
+
+            // ── Layer 3: Loading indicator ────────────────────────────────
+            if (!videoReady && !_hasError && _isLoading)
+              const Center(
+                child: CircularProgressIndicator(
+                  color: Colors.white54,
+                  strokeWidth: 2,
+                ),
+              ),
+
+            // ── Layer 4: Error message ────────────────────────────────────────
+            if (_hasError)
+              const Center(
+                child: Text(
+                  'Reconectando con el servidor...',
+                  style: TextStyle(color: Colors.white54, fontSize: 14),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
