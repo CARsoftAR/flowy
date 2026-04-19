@@ -281,7 +281,7 @@ class _MiniPlayerContent extends StatelessWidget {
                       },
                     ),
                     const SizedBox(width: 8),
-                    _PlayPauseButton(song: song, player: player),
+                    _PlayPauseButton(song: song, player: player, isError: isError),
                     const SizedBox(width: 8),
                     _ControlButton(
                       icon: Icons.skip_next_rounded,
@@ -332,7 +332,8 @@ class _MiniPlayerContent extends StatelessWidget {
 class _PlayPauseButton extends StatelessWidget {
   final SongEntity song;
   final PlayerProvider player;
-  const _PlayPauseButton({required this.song, required this.player});
+  final bool isError;
+  const _PlayPauseButton({required this.song, required this.player, this.isError = false});
 
   @override
   Widget build(BuildContext context) {

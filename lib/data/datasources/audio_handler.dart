@@ -241,7 +241,6 @@ class FlowyAudioHandler extends BaseAudioHandler
     await _player.stop();
 
     String? streamUrl;
-    try {
     int retries = 0;
     while (retries < 3) {
       try {
