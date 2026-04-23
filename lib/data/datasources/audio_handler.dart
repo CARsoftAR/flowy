@@ -33,7 +33,6 @@ class FlowyAudioHandler extends BaseAudioHandler
   late AudioPlayer _nextPlayer;
   final List<StreamSubscription> _subs = [];
   final Map<String, String?> _urlCache = {};
-  final Map<String, String?> _videoUrlCache = {};
 
   File? _debugLog;
 
@@ -183,42 +182,10 @@ class FlowyAudioHandler extends BaseAudioHandler
     _currentIndex = idx < 0 ? 0 : idx;
     _updateQueueMetadata();
 
-    _preloadVideoUrl(song.id);
-
     await _loadAndPlay(_currentIndex);
   }
 
-  Future<void> _preloadVideoUrl(String videoId) async {
-    _writeDebug('🎥 Video preload start: $videoId');
-    if (_videoUrlCache.containsKey(videoId)) {
-      _writeDebug('🎥 Already cached: $videoId');
-      return;
-    }
-    try {
-      _writeDebug('🎥 Calling getStreamUrl(videoId=$videoId, isVideo=true)');
-      final result = await _musicRepo
-          .getStreamUrl(videoId, isVideo: true)
-          .timeout(const Duration(seconds: 25));
-      String? url;
-      result.fold((err) {
-        _writeDebug('🎥 Error getting video: $err');
-        url = null;
-      }, (u) {
-        _writeDebug('🎥 Got video url: ${u?.substring(0, 50)}...');
-        url = u;
-      });
-      if (url != null && url!.isNotEmpty) {
-        _videoUrlCache[videoId] = url;
-        customEvent
-            .add({'type': 'video_url_resolved', 'songId': videoId, 'url': url});
-        _writeDebug('🎥 Video URL cached: ${videoId}');
-      } else {
-        _writeDebug('🎥 No video URL returned');
-      }
-    } catch (e) {
-      _writeDebug('🎥 Video preload failed: $e');
-    }
-  }
+
 
   Future<void> _loadAndPlay(int index) async {
     final myGeneration = ++_loadGeneration;
@@ -501,27 +468,7 @@ class FlowyAudioHandler extends BaseAudioHandler
     return _urlCache[id];
   }
 
-  String? getCachedVideoUrl(String id) {
-    return _videoUrlCache[id];
-  }
 
-  Future<String?> getVideoUrl(String videoId) async {
-    if (_videoUrlCache.containsKey(videoId)) {
-      return _videoUrlCache[videoId];
-    }
-    try {
-      final result = await _musicRepo
-          .getStreamUrl(videoId, isVideo: true)
-          .timeout(const Duration(seconds: 25));
-      final url = result.getOrElse(() => '');
-      if (url.isNotEmpty) {
-        _videoUrlCache[videoId] = url;
-      }
-      return url;
-    } catch (e) {
-      return null;
-    }
-  }
 
   Stream<Duration> get positionStream => _player.positionStream;
   Duration get position => _player.position;

@@ -9,7 +9,7 @@ import '../../../../domain/repositories/repositories.dart';
 import '../../../../core/di/injection.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../library/presentation/providers/library_provider.dart';
-import '../../../stats/presentation/providers/stats_provider.dart';
+
 
 class MoodFiltersRow extends StatefulWidget {
   const MoodFiltersRow({super.key});
@@ -238,11 +238,8 @@ class _MoodFiltersRowState extends State<MoodFiltersRow> {
 
         final player = context.read<PlayerProvider>();
         final library = context.read<LibraryProvider>();
-        final stats = context.read<StatsProvider>();
-        
         player.playSong(songs.first, queue: songs);
         library.addToHistory(songs.first);
-        stats.trackPlay(songs.first);
 
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(

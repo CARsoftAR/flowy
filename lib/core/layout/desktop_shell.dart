@@ -209,13 +209,7 @@ class _FloatingSidebar extends StatelessWidget {
             onTap: () => onIndexChanged(2),
           ),
           const Spacer(),
-          if (AppConstants.isPremium)
-            _SidebarIcon(
-              icon: Icons.auto_graph_rounded,
-              isSelected: selectedIndex == 3,
-              onTap: () => onIndexChanged(3),
-              color: const Color(0xFFFFD700),
-            ),
+
         ],
       ),
     );

@@ -4,7 +4,7 @@ class AppConstants {
   AppConstants._();
 
   // ── Flavor Configuration ──────────────────────────────────────────
-  static const AppFlavor currentFlavor = AppFlavor.premium;
+  static const AppFlavor currentFlavor = AppFlavor.standard;
   static bool get isPremium => currentFlavor == AppFlavor.premium;
   static bool get isStandard => currentFlavor == AppFlavor.standard;
   static String get flavorName => isPremium ? 'PREMIUM' : 'STANDARD';

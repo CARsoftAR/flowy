@@ -4,6 +4,7 @@ import 'package:dartz/dartz.dart';
 import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import '../../core/network/flowy_http_client.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/errors/failures.dart';
 import '../../services/flowy_engine.dart';
@@ -46,26 +47,18 @@ class MusicRepositoryImpl implements MusicRepository {
 
   @override
   FutureEither<SearchResultEntity> search(String query) async {
-    // ── PRIMARY SEARCH: Invidious API (Dynamic) ────────────────────────────────
     try {
-      final baseUrl = FlowyEngine.currentApiUrl;
-      final uri = Uri.parse(
-          '$baseUrl/api/v1/search?q=${Uri.encodeComponent(query)}&type=video');
-
-      _log.d('Searching via Invidious: $baseUrl');
-
-      // HEADERS OBLIGATORIOS PARA EVITAR BLOQUEOS
-      final response = await http.get(
-        uri,
-        headers: {
-          'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/119.0.0.0 Safari/537.36',
-          'Accept': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 5));
+      final path = '/api/v1/search?q=${Uri.encodeComponent(query)}&type=video';
+      final response = await FlowyEngine.performRequest(path);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
+
+        if (data.isEmpty) {
+          _log.w('La respuesta está vacía');
+          return Right(SearchResultEntity(query: query, songs: []));
+        }
+
         final List<SongEntity> songs = data.map((item) {
           String? thumb;
           if (item['videoThumbnails'] != null &&
@@ -78,8 +71,7 @@ class MusicRepositoryImpl implements MusicRepository {
             artist: item['author'] ?? 'Artista desconocido',
             thumbnailUrl: thumb,
             duration: Duration(seconds: item['lengthSeconds'] ?? 0),
-            isVideo:
-                AppConstants.isPremium, // Integración de video para Premium
+            isVideo: false, // Deshabilitamos video para volver a música pura
           );
         }).where((s) {
           if (!_isValidVideoId(s.id)) return false;
@@ -173,50 +165,14 @@ class MusicRepositoryImpl implements MusicRepository {
       try {
         _log.d('Invidious: Probando $baseUrl para $videoId');
 
-        final metaRes = await http.get(
-          Uri.parse('$baseUrl/api/v1/videos/$videoId'),
-          headers: {
-            'User-Agent':
-                'com.google.android.youtube/19.05.36 (Linux; U; Android 14; en_US; Pixel 8 Pro) gzip',
-            'X-YouTube-Client-Name': '3',
-            'X-YouTube-Client-Version': '19.05.36',
-            'Accept': 'application/json',
-          },
-        ).timeout(const Duration(seconds: 10));
+        final path = '/api/v1/videos/$videoId';
+        final response = await FlowyEngine.performRequest(path);
 
-        if (metaRes.statusCode == 200) {
-          final data = json.decode(metaRes.body);
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
           String? streamUrl;
 
-          if (isVideo) {
-            // Buscar en formatStreams (muxed: video+audio juntos)
-            final formatStreams = data['formatStreams'] as List<dynamic>?;
-            if (formatStreams != null && formatStreams.isNotEmpty) {
-              formatStreams.sort((a, b) {
-                final resA = int.tryParse(a['resolution']
-                            ?.toString()
-                            .replaceAll('p', '')
-                            .replaceAll('x', '') ??
-                        '0') ??
-                    0;
-                final resB = int.tryParse(b['resolution']
-                            ?.toString()
-                            .replaceAll('p', '')
-                            .replaceAll('x', '') ??
-                        '0') ??
-                    0;
-                return resB.compareTo(resA);
-              });
-              streamUrl = formatStreams.first['url']?.toString();
-              _log.d(
-                  'Invidious: Video muxed ${formatStreams.first['resolution']} → $streamUrl');
-            }
-          }
 
-          if (streamUrl != null && streamUrl.isNotEmpty) {
-            _log.i('Invidious Video OK → $streamUrl');
-            return Right(streamUrl);
-          }
 
           int? bestItag;
           final adaptiveFormats = data['adaptiveFormats'] as List<dynamic>?;
@@ -277,13 +233,16 @@ class MusicRepositoryImpl implements MusicRepository {
       try {
         bool isLiveStream = false;
         Duration? videoDuration;
-        
+
         // Metadata fetch
-        final video = await _yt.videos.get(videoId).timeout(const Duration(seconds: 12));
+        final video =
+            await _yt.videos.get(videoId).timeout(const Duration(seconds: 12));
         isLiveStream = video.isLive;
         videoDuration = video.duration;
 
-        if (isLiveStream || videoDuration == null || videoDuration == Duration.zero) {
+        if (isLiveStream ||
+            videoDuration == null ||
+            videoDuration == Duration.zero) {
           final nativeUrl = await _getHttpLiveStreamUrl(videoId);
           if (nativeUrl != null) return Right(nativeUrl);
           final hlsUrl = await _getLiveStreamUrl(videoId);
@@ -420,18 +379,9 @@ class MusicRepositoryImpl implements MusicRepository {
   }
 
   List<Future<String?> Function(String)> _getStrategies(bool isVideo) {
-    // Grupo rápido (ejecutar en paralelo)
-    if (!isVideo) {
-      return [
-        _tryTvClientFast, // Timeout 8s
-        _tryAndroidVrFast, // Timeout 8s
-      ];
-    }
     return [
       _tryTvClientFast,
       _tryAndroidVrFast,
-      if (isVideo) _tryMuxedVideo, // Activar video nativo
-      if (isVideo) _tryAnyVideo,
       _tryIosClient,
       _tryAndroidClient,
       _tryAnyAudio,
@@ -483,30 +433,7 @@ class MusicRepositoryImpl implements MusicRepository {
     return null;
   }
 
-  Future<String?> _tryMuxedVideo(String videoId) async {
-    try {
-      _log.d('Strategy: Muxed Video for $videoId');
-      final manifest = await _yt.videos.streamsClient.getManifest(videoId);
-      final stream = manifest.muxed.withHighestBitrate();
-      return stream.url.toString();
-    } catch (e) {
-      _log.w('Muxed Video strategy failed: $e');
-    }
-    return null;
-  }
 
-  Future<String?> _tryAnyVideo(String videoId) async {
-    try {
-      _log.d('Strategy: Any Video for $videoId');
-      final manifest = await _yt.videos.streamsClient.getManifest(videoId);
-      if (manifest.muxed.isNotEmpty) {
-        return manifest.muxed.first.url.toString();
-      }
-    } catch (e) {
-      _log.w('Any Video strategy failed: $e');
-    }
-    return null;
-  }
 
   /// Estrategia: Cliente iOS
   Future<String?> _tryIosClient(String videoId) async {

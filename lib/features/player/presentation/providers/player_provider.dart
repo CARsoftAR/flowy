@@ -27,7 +27,6 @@ class PlayerProvider extends ChangeNotifier {
   String? _errorMessage;
   // Flag para bloquear el stream mientras se ejecuta stop()
   bool _isStopping = false;
-  bool _videoMode = false;
   Color _dominantColor = const Color(0xFF1DB954); // Default Spotify Green
 
   PlayerProvider({
@@ -60,7 +59,6 @@ class PlayerProvider extends ChangeNotifier {
   Color get dominantColor => _dominantColor;
   String? get errorMessage => _errorMessage;
   FlowyAudioHandler get handler => _handler;
-  bool get videoMode => _videoMode;
   bool get hasError => _status == PlayerStatus.error && _errorMessage != null;
 
   double get progress {
@@ -130,8 +128,6 @@ class PlayerProvider extends ChangeNotifier {
         if (event['type'] == 'favorite_toggled') {
           notifyListeners();
         } else if (event['type'] == 'url_resolved') {
-          notifyListeners();
-        } else if (event['type'] == 'video_url_resolved') {
           notifyListeners();
         }
       }
@@ -258,23 +254,6 @@ class PlayerProvider extends ChangeNotifier {
     _playbackSpeed = speed;
     await _handler.setSpeed(speed);
     notifyListeners();
-  }
-
-  Future<void> toggleVideoMode() async {
-    _videoMode = !_videoMode;
-    notifyListeners();
-
-    // Fuerza la recarga de URL de video
-    if (_currentSong != null && _videoMode) {
-      final videoUrl = await _handler.getVideoUrl(_currentSong!.id);
-      debugPrint('📺 toggleVideoMode: got videoUrl=${videoUrl != null}');
-    }
-
-    // Si hay una canción sonando, intentamos reiniciarla con el nuevo modo
-    if (_currentSong != null) {
-      final updatedSong = _currentSong!.copyWith(isVideo: _videoMode);
-      await playSong(updatedSong, queue: _handler.currentQueue);
-    }
   }
 
   Future<void> setVolume(double vol) async {

@@ -23,8 +23,6 @@ import 'features/player/presentation/providers/sleep_timer_provider.dart';
 import 'features/player/presentation/widgets/mini_player.dart';
 import 'features/search/presentation/pages/search_page.dart';
 import 'features/search/presentation/providers/search_history_provider.dart';
-import 'features/stats/presentation/pages/stats_page.dart';
-import 'features/stats/presentation/providers/stats_provider.dart';
 import 'features/splash/presentation/pages/splash_page.dart';
 import 'core/theme/ambient_background.dart';
 import 'core/widgets/loading_overlay.dart';
@@ -32,8 +30,12 @@ import 'core/layout/desktop_shell.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'core/network/flowy_http_client.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  HttpOverrides.global = IPv4HttpOverrides();
   
   if (Platform.isWindows || Platform.isLinux) {
     sqfliteFfiInit();
@@ -46,8 +48,10 @@ Future<void> main() async {
     }
   }
 
-  FlutterError.onError = FlutterError.presentError;
-
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+  };
+  
   _runAppWithSafety();
 }
 
@@ -137,9 +141,6 @@ Future<void> _init() async {
         ChangeNotifierProvider<SleepTimerProvider>(
           create: (_) => SleepTimerProvider(sl<FlowyAudioHandler>()),
         ),
-        ChangeNotifierProvider<StatsProvider>(
-          create: (_) => StatsProvider(prefs),
-        ),
       ],
       child: const FlowyApp(),
     ),
@@ -184,7 +185,6 @@ class _FlowyShellState extends State<FlowyShell> {
     const HomePage(),
     const SearchPage(),
     const LibraryPage(),
-    if (AppConstants.isPremium) const StatsPage(),
   ];
 
   @override
@@ -244,12 +244,6 @@ class _FlowyShellState extends State<FlowyShell> {
                       selectedIcon: Icon(Icons.library_music_rounded),
                       label: 'Biblioteca',
                     ),
-                    if (AppConstants.isPremium)
-                      const NavigationDestination(
-                        icon: Icon(Icons.auto_graph_outlined),
-                        selectedIcon: Icon(Icons.auto_graph_rounded),
-                        label: 'Stats',
-                      ),
                   ],
                 ),
               ),

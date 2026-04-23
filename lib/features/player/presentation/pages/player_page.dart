@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../widgets/video_player_widget.dart';
 import '../widgets/realtime_visualizer.dart';
 
 import 'package:flutter/material.dart';
@@ -86,7 +85,7 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
                               position: player.position,
                               onTap: () => setState(() => _showLyrics = false),
                             )
-                          : _buildVideoSection(song, player),
+                          : _buildArtworkSection(song, player.dominantColor),
                     ),
                   ),
                   _buildSongInfo(context, player, song),
@@ -235,50 +234,6 @@ class _PlayerPageState extends State<PlayerPage> with TickerProviderStateMixin {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  bool _hasVideoUrl(pp.PlayerProvider player, SongEntity song) {
-    final url = player.handler.getCachedVideoUrl(song.id);
-    return url != null && url.isNotEmpty;
-  }
-
-  Widget _buildVideoSection(SongEntity song, pp.PlayerProvider player) {
-    final streamUrl = player.handler.getCachedVideoUrl(song.id);
-    final hasVideo = streamUrl != null && streamUrl.isNotEmpty;
-    debugPrint(
-        '🎥 VideoSection: hasVideo=$hasVideo, url=${streamUrl?.substring(0, 30)}');
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Capa base (fondo): carátula - solo visible si NO hay video
-            if (!hasVideo)
-              CachedNetworkImage(
-                imageUrl: song.bestThumbnail,
-                fit: BoxFit.cover,
-                placeholder: (_, __) => Container(color: Colors.black),
-                errorWidget: (_, __, ___) => Container(color: Colors.black),
-              ),
-            // Capa video (superior): intenta reproducir si hay URL
-            if (hasVideo)
-              VideoPlayerWidget(
-                key: ValueKey('${streamUrl}_${song.id}'),
-                songId: song.id,
-                streamUrl: streamUrl,
-                coverUrl: song.bestThumbnail,
-                isPlaying: player.isPlaying,
-                position: player.position,
-              )
-            else
-              Container(color: Colors.black54),
-          ],
-        ),
       ),
     );
   }

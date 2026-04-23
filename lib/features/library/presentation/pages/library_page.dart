@@ -7,7 +7,7 @@ import 'package:flowy/domain/entities/entities.dart';
 import 'package:flowy/features/player/presentation/providers/player_provider.dart';
 import 'package:flowy/features/library/presentation/providers/library_provider.dart';
 import 'package:flowy/features/library/presentation/providers/download_provider.dart';
-import 'package:flowy/features/stats/presentation/providers/stats_provider.dart';
+
 import 'package:flowy/features/home/presentation/widgets/song_tile.dart';
 import 'package:flowy/features/home/presentation/widgets/section_header.dart';
 import 'package:flowy/features/library/presentation/widgets/spotify_import_dialog.dart';
@@ -404,7 +404,6 @@ class _LibraryPageState extends State<LibraryPage> {
       return SongTile(song: song, index: index, onTap: () {
         context.read<PlayerProvider>().playSong(song, queue: songs);
         context.read<LibraryProvider>().addToHistory(song);
-        context.read<StatsProvider>().trackPlay(song);
       });
     }, childCount: songs.length));
   }

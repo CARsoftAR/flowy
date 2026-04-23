@@ -11,7 +11,7 @@ import '../../../../core/di/injection.dart';
 import '../../../../services/flowy_engine.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../library/presentation/providers/library_provider.dart';
-import '../../../stats/presentation/providers/stats_provider.dart';
+
 import '../widgets/song_tile.dart';
 import '../widgets/section_header.dart';
 import '../widgets/mood_filters_row.dart';
@@ -236,12 +236,10 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                     
-                    if (AppConstants.isPremium) ...[
-                      const SizedBox(height: 32),
-                      const MoodFiltersRow(),
-                      const SizedBox(height: 32),
-                      const RadioStationsRow(),
-                    ],
+                    const SizedBox(height: 32),
+                    const MoodFiltersRow(),
+                    const SizedBox(height: 32),
+                    const RadioStationsRow(),
                   ],
                 ),
               ),
@@ -363,10 +361,8 @@ class _HomePageState extends State<HomePage> {
     HapticEngine.light();
     final player = context.read<PlayerProvider>();
     final library = context.read<LibraryProvider>();
-    final stats = context.read<StatsProvider>();
     player.playSong(song, queue: _recommendations);
     library.addToHistory(song);
-    stats.trackPlay(song);
   }
 
   Widget _buildLoadingSliver(bool isDesktop) {

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/network/flowy_http_client.dart';
+import 'dart:io';
 
 enum ConnectionStatus { checking, connected, degraded, offline }
 
@@ -66,6 +68,16 @@ class FlowyEngine {
       type: ProviderType.invidious,
     ),
     const ProviderInfo(
+      name: 'Invidious (NoLogs)',
+      url: 'https://invidious.no-logs.com',
+      type: ProviderType.invidious,
+    ),
+    const ProviderInfo(
+      name: 'Invidious (TuxPizza)',
+      url: 'https://inv.tux.pizza',
+      type: ProviderType.invidious,
+    ),
+    const ProviderInfo(
       name: 'Piped (Official)',
       url: 'https://api.piped.yt',
       type: ProviderType.piped,
@@ -101,28 +113,71 @@ class FlowyEngine {
     }
 
     currentProviderType = ProviderType.invidious;
-    currentApiUrl = 'https://inv.nadeko.net';
+    currentApiUrl = 'https://yewtu.be';
     status.value = ConnectionStatus.connected;
     debugPrint('✅ Default: $currentApiUrl');
   }
 
   static Future<void> refresh() async {
-    debugPrint('🔄 FlowyEngine.refresh()');
+    debugPrint('🔄 FlowyEngine: Intentando conexión directa a yewtu.be...');
 
+    // Forzar una sola instancia estable
+    currentApiUrl = 'https://yewtu.be';
+    currentProviderType = ProviderType.invidious;
+
+    // Verificar que responde
     try {
-      final working = await _findWorkingInstance();
-      if (working != null) {
-        currentApiUrl = working;
-        currentProviderType = ProviderType.invidious;
-        await _saveCache(working);
+      final response = await FlowyHttpClient.getTuned(
+              Uri.parse('https://yewtu.be/api/v1/trending'))
+          .timeout(const Duration(seconds: 10));
+
+      debugPrint('📡 yewtu.be responde: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
         status.value = ConnectionStatus.connected;
-        debugPrint('✅ Provider: $working');
-      } else {
-        _useOfflineMode();
+        await _saveCache('https://yewtu.be');
+        debugPrint('✅ Conexión exitosa a yewtu.be');
+        return;
       }
     } catch (e) {
-      _useOfflineMode();
-      debugPrint('⚠️ Error: $e');
+      debugPrint('❌ yewtu.be falló: $e');
+    }
+
+    // Si falla, intentar alternativa
+    _useOfflineMode();
+  }
+
+  /// Centralized request handler with fallback and retry logic
+  static Future<http.Response> performRequest(String pathAndQuery) async {
+    if (currentApiUrl.isEmpty) await initialize();
+
+    final uri = Uri.parse('$currentApiUrl$pathAndQuery');
+    final client = FlowyHttpClient();
+
+    try {
+      final response =
+          await client.get(uri).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode >= 400) {
+        throw HttpException('API Error ${response.statusCode}');
+      }
+
+      return response;
+    } catch (e) {
+      debugPrint('⚠️ Request failed: $e. Attempting fallback...');
+
+      // Reset session and find new instance
+      await refresh();
+
+      if (currentApiUrl.isNotEmpty) {
+        final retryUri = Uri.parse('$currentApiUrl$pathAndQuery');
+        // Final attempt with new instance and fresh client (clears cookies implicitly)
+        return await client.get(retryUri).timeout(const Duration(seconds: 10));
+      }
+
+      rethrow;
+    } finally {
+      client.close();
     }
   }
 
@@ -136,7 +191,7 @@ class FlowyEngine {
   static Future<String?> _findWorkingInstance() async {
     for (final provider in _allProviders) {
       if (provider.type == ProviderType.youtubeDirect) continue;
-      if (await _quickPing(provider.url, 2)) {
+      if (await _quickPing(provider.url, 1)) {
         return provider.url;
       }
     }
@@ -172,8 +227,7 @@ class FlowyEngine {
 
   static Future<String?> _fetchFromGist() async {
     try {
-      final response = await http
-          .get(Uri.parse(_gistUrl))
+      final response = await FlowyHttpClient.getTuned(Uri.parse(_gistUrl))
           .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -188,8 +242,8 @@ class FlowyEngine {
   static Future<bool> _quickPing(String instance, int timeoutSecs) async {
     if (instance.isEmpty) return true;
     try {
-      final response = await http
-          .get(Uri.parse('$instance/api/v1/videos/$_testVideoId'))
+      final response = await FlowyHttpClient.getTuned(
+              Uri.parse('$instance/api/v1/videos/$_testVideoId'))
           .timeout(Duration(seconds: timeoutSecs));
       return response.statusCode == 200;
     } catch (e) {

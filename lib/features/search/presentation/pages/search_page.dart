@@ -12,7 +12,7 @@ import '../../../../domain/repositories/repositories.dart';
 import '../../../../core/di/injection.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../library/presentation/providers/library_provider.dart';
-import '../../../stats/presentation/providers/stats_provider.dart';
+
 import '../providers/search_history_provider.dart';
 import '../../../home/presentation/widgets/song_tile.dart';
 import '../widgets/interest_card.dart';
@@ -438,7 +438,6 @@ class _SearchPageState extends State<SearchPage> {
                     onTap: () {
                       context.read<PlayerProvider>().playSong(song, queue: results.songs);
                       context.read<LibraryProvider>().addToHistory(song);
-                      context.read<StatsProvider>().trackPlay(song);
                     },
                   ).animate().fadeIn(delay: Duration(milliseconds: index * 30)).slideX(begin: 0.05),
                 );
@@ -533,7 +532,6 @@ class _SearchPageState extends State<SearchPage> {
             TrendingMusicGrid(songs: _trendingSongs, onTap: (song) {
               context.read<PlayerProvider>().playSong(song, queue: _trendingSongs);
               context.read<LibraryProvider>().addToHistory(song);
-              context.read<StatsProvider>().trackPlay(song);
             }),
             const SizedBox(height: 32),
           ],
